@@ -1,10 +1,19 @@
-# SimpleBGC32 Python Serial API
+SimpleBGC32 Serial API Open Source Python Library
+============================================
+[![Web-site](https://www.basecamelectronics.com/img/logo.basecam.onwhite.png)](https://www.basecamelectronics.com)
 
+Description
+-----------
 Python bindings for the BaseCam SimpleBGC32 Serial API. The package opens a
 SimpleBGC controller through a Windows COM port and exposes selected protocol
 commands through a small Python interface.
 
-## Requirements
+Files Description
+-----------------
+
+
+Requirements
+------------
 
 - Windows 10 or Windows 11, 64-bit
 - Python 3.10 or newer, 64-bit
@@ -15,8 +24,8 @@ commands through a small Python interface.
   - MSVC v143 compiler toolset
   - Windows 10 or Windows 11 SDK
 
-## Set up Python
-
+Set up Python
+-----------------------
 Check the Python version:
 
 ```powershell
@@ -45,8 +54,8 @@ To list the available serial ports:
 python -m serial.tools.list_ports
 ```
 
-## Build the native DLL
-
+Build the native DLL
+-----------------------
 Before rebuilding, stop any Python scripts and PyCharm debug sessions that use
 the library. Windows cannot replace a DLL while it is loaded by a running
 process.
@@ -72,8 +81,8 @@ To use certain functions, set ON necessary moduls in `serialAPI_Config.h`. For e
 for function `get_board_info()` require `SBGC_SERVICE_MODULE = sbgcON` . If it is disabled, the DLL
 still builds. These Python methods raise `NativeError` explaining that the module is disabled.
 
-## Connect and run the example
-
+How to use this library
+-----------------------
 1. Connect the controller.
 2. Close any other application using its COM port, such as a serial terminal.
 3. Open `examples/QuickStart.py` and set the correct port and baud rate, for
@@ -87,3 +96,10 @@ python examples\QuickStart.py
 The Quick Start command order is deliberate: it calls `CMD_BOARD_INFO` once to
 check the controller and then repeatedly calls `CMD_GET_ANGLES` to read its
 current state.
+
+Feedback
+--------
+
+If you have any questions or suggestions about using this library, you can contact at:
+
+support@basecamelectronics.com
