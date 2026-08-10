@@ -1,0 +1,4 @@
+C:/Basecam/python_serialAPI/build/native/CMakeFiles/sbgc_python.dir
+C:/Basecam/python_serialAPI/build/native/CMakeFiles/INSTALL.dir
+C:/Basecam/python_serialAPI/build/native/CMakeFiles/ALL_BUILD.dir
+C:/Basecam/python_serialAPI/build/native/CMakeFiles/ZERO_CHECK.dir
