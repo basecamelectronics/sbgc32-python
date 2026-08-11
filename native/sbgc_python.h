@@ -235,6 +235,12 @@ SBGC_PY_API sbgc_py_status_t sbgc_py_get_realtime_data_3 (
 SBGC_PY_API sbgc_py_status_t sbgc_py_get_realtime_data_4 (
     sbgc_py_device_t *device, sbgc_py_realtime_data_t *realtime_data
 );
+/* ``result`` must provide at least ``payload_size + 4`` bytes. The bridge
+   stores the request flags in result[0..3]; SerialAPI writes the received
+   CMD_REALTIME_DATA_CUSTOM payload at result + 4. */
+SBGC_PY_API sbgc_py_status_t sbgc_py_get_realtime_data_custom (
+    sbgc_py_device_t *device, uint32_t flags, uint8_t *result, uint8_t payload_size
+);
 
 /* Diagnostic snapshots of the most recent command exchange. */
 SBGC_PY_API uint16_t sbgc_py_copy_last_tx (sbgc_py_device_t *device, uint8_t *buffer, uint16_t capacity);

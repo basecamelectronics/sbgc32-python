@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import struct
+from types import MappingProxyType
 from time import sleep
 
 from .commands import Command
@@ -13,6 +15,8 @@ from .types import (
     BoardInfo,
     BoardInfo3,
     MotorsOffMode,
+    RealtimeDataCustom,
+    RealtimeDataCustomFlag,
     RealtimeData3,
     RealtimeData4,
     ScriptDebugInfo,
@@ -197,6 +201,89 @@ class SimpleBGC:
             reserved2=bytes(result.reserved2),
         )
 
+    def get_realtime_data_custom(
+        self, flags: RealtimeDataCustomFlag | int
+    ) -> RealtimeDataCustom:
+        """Request only the realtime fields selected by ``flags``.
+
+        The command is read-only. Its variable-length response is decoded in
+        the exact order prescribed by the requested bit flags.
+        """
+        self._ensure_open()
+        try:
+            selected_flags = RealtimeDataCustomFlag(flags)
+        except ValueError as error:
+            raise ValueError("flags must contain only CMD_REALTIME_DATA_CUSTOM bits") from error
+        if int(selected_flags) < 0 or int(selected_flags) & ~((1 << 28) - 1):
+            raise ValueError("flags must contain only CMD_REALTIME_DATA_CUSTOM bits")
+
+        payload_size = self._realtime_data_custom_payload_size(selected_flags)
+        raw_payload = self._native.get_realtime_data_custom(
+            self._device, int(selected_flags), payload_size
+        )
+        return self._parse_realtime_data_custom(selected_flags, raw_payload)
+
+    @staticmethod
+    def _realtime_data_custom_payload_size(flags: RealtimeDataCustomFlag) -> int:
+        field_sizes = (
+            6, 6, 6, 6, 6, 12, 24, 36, 6, 8, 26, 9, 12, 40, 20, 46,
+            6, 12, 12, 7, 13, 8, 8, 8, 8, 12, 6, 24,
+        )
+        size = 2 + sum(size for bit, size in enumerate(field_sizes) if int(flags) & (1 << bit))
+        if size > 0xFF:
+            raise ValueError(
+                f"selected realtime fields require {size} bytes; the protocol limit is 255"
+            )
+        return size
+
+    @staticmethod
+    def _parse_realtime_data_custom(
+        flags: RealtimeDataCustomFlag, raw_payload: bytes
+    ) -> RealtimeDataCustom:
+        timestamp_ms = struct.unpack_from("<H", raw_payload)[0]
+        offset = 2
+        fields: dict[RealtimeDataCustomFlag, object] = {}
+
+        def read(format_string: str):
+            nonlocal offset
+            size = struct.calcsize(format_string)
+            value = struct.unpack_from(format_string, raw_payload, offset)
+            offset += size
+            return value[0] if len(value) == 1 else value
+
+        def read_bytes(size: int) -> bytes:
+            nonlocal offset
+            value = raw_payload[offset:offset + size]
+            offset += size
+            return value
+
+        parsers = (
+            lambda: read("<3h"), lambda: read("<3h"), lambda: read("<3h"),
+            lambda: read("<3h"), lambda: read("<3h"), lambda: read("<6h"),
+            lambda: read("<6f"), lambda: read("<18h"), lambda: read("<3h"),
+            lambda: read("<hhf"), lambda: read_bytes(26), lambda: read_bytes(9),
+            lambda: read("<3f"), lambda: read("<10f"), lambda: read("<10h"),
+            lambda: read_bytes(46), lambda: read("<3h"), lambda: read("<3i"),
+            lambda: read("<3i"), lambda: read("<3HB"), lambda: read_bytes(13),
+            lambda: read_bytes(8), lambda: read_bytes(8), lambda: read_bytes(8),
+            lambda: read("<4H"), lambda: read("<6h"), lambda: read("<3h"),
+            lambda: read("<6i"),
+        )
+        for bit, parser in enumerate(parsers):
+            flag = RealtimeDataCustomFlag(1 << bit)
+            if flags & flag:
+                fields[flag] = parser()
+        if offset != len(raw_payload):
+            raise NativeError(
+                "REALTIME_DATA_CUSTOM response length does not match the requested flags."
+            )
+        return RealtimeDataCustom(
+            flags=flags,
+            timestamp_ms=timestamp_ms,
+            fields=MappingProxyType(fields),
+            raw_payload=raw_payload,
+        )
+
     @staticmethod
     def _make_realtime_data_3(result) -> RealtimeData3:
         return RealtimeData3(
@@ -279,24 +366,59 @@ class SimpleBGC:
             adjustable_variables_total=result.adjustable_variables_total,
         )
 
-    # Compatibility entry point for the currently read command
+
+    # Compatibility entry point for supported request and action commands.
     def execute(
-        self, command: Command
-    ) -> Angles | AnglesExt | BoardInfo | BoardInfo3 | RealtimeData3 | RealtimeData4:
+        self, command: Command | int, **kwargs
+    ) -> (
+        Angles
+        | AnglesExt
+        | BoardInfo
+        | BoardInfo3
+        | RealtimeData3
+        | RealtimeData4
+        | RealtimeDataCustom
+        | None
+    ):
+        command = Command(command)
+
+        def read(method):
+            if kwargs:
+                names = ", ".join(kwargs)
+                raise TypeError(f"{command.name} does not accept keyword arguments: {names}")
+            return method()
+
         if command is Command.CMD_GET_ANGLES:
-            return self.get_angles()
+            return read(self.get_angles)
         if command is Command.CMD_GET_ANGLES_EXT:
-            return self.get_angles_ext()
+            return read(self.get_angles_ext)
         if command is Command.CMD_REALTIME_DATA:
-            return self.get_realtime_data()
+            return read(self.get_realtime_data)
         if command is Command.CMD_REALTIME_DATA_3:
-            return self.get_realtime_data_3()
+            return read(self.get_realtime_data_3)
         if command is Command.CMD_REALTIME_DATA_4:
-            return self.get_realtime_data_4()
+            return read(self.get_realtime_data_4)
+        if command is Command.CMD_REALTIME_DATA_CUSTOM:
+            try:
+                flags = kwargs.pop("flags")
+            except KeyError as error:
+                raise TypeError("CMD_REALTIME_DATA_CUSTOM requires flags=...") from error
+            if kwargs:
+                names = ", ".join(kwargs)
+                raise TypeError(
+                    f"CMD_REALTIME_DATA_CUSTOM does not accept keyword arguments: {names}"
+                )
+            return self.get_realtime_data_custom(flags)
         if command is Command.CMD_BOARD_INFO:
-            return self.get_board_info()
+            return read(self.get_board_info)
         if command is Command.CMD_BOARD_INFO_3:
-            return self.get_board_info_3()
+            return read(self.get_board_info_3)
+        if command is Command.CMD_RUN_SCRIPT:
+            return self.run_script(**kwargs)
+        if command is Command.CMD_MOTORS_ON:
+            return read(self.motors_on)
+        if command is Command.CMD_MOTORS_OFF:
+            return self.motors_off(**kwargs)
         raise NotImplementedError(f"Command {command.name} is not implemented")
 
 

@@ -754,6 +754,42 @@ sbgc_py_status_t sbgc_py_get_realtime_data_4 (
 }
 
 
+sbgc_py_status_t sbgc_py_get_realtime_data_custom (
+    sbgc_py_device_t *device, uint32_t flags, uint8_t *result, uint8_t payload_size
+)
+{
+#if (SBGC_REALTIME_MODULE)
+    sbgcCommandStatus_t status;
+
+    if (device == NULL || result == NULL || payload_size < 2)
+        return SBGC_PY_INVALID_ARGUMENT;
+    if (!device->connected)
+        return SBGC_PY_NOT_CONNECTED;
+    if (current_device != device)
+        return SBGC_PY_ERROR;
+
+    /* SBGC32_RequestRealTimeDataCustom reads flags from the first four bytes
+       and, on a little-endian host, writes the received payload at byte 4. */
+    memset(result, 0, (size_t)payload_size + 4);
+    memcpy(result, &flags, sizeof(flags));
+    device->last_tx_size = 0;
+    device->last_rx_size = 0;
+    status = SBGC32_RequestRealTimeDataCustom(&device->serial_api, result, payload_size);
+    if (status != sbgcCOMMAND_OK ||
+        device->serial_api._lastSerialCommandStatus != serialAPI_TX_RX_OK)
+        return SBGC_PY_COMMUNICATION_ERROR;
+
+    return SBGC_PY_OK;
+#else
+    (void)device;
+    (void)flags;
+    (void)result;
+    (void)payload_size;
+    return SBGC_PY_MODULE_DISABLED;
+#endif
+}
+
+
 uint16_t sbgc_py_copy_last_tx (sbgc_py_device_t *device, uint8_t *buffer, uint16_t capacity)
 {
     uint16_t size;

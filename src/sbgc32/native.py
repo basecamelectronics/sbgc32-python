@@ -390,6 +390,7 @@ class NativeLibrary:
         self._raw_script_debug_devices: set[int] = set()
         self._raw_realtime_data_3_devices: set[int] = set()
         self._raw_realtime_data_4_devices: set[int] = set()
+        self._raw_realtime_data_custom_devices: set[int] = set()
 
     def _configure_functions(self) -> None:
         lib = self._library
@@ -457,6 +458,13 @@ class NativeLibrary:
             ctypes.POINTER(NativeRealtimeData),
         ]
         lib.sbgc_py_get_realtime_data_4.restype = ctypes.c_int
+        lib.sbgc_py_get_realtime_data_custom.argtypes = [
+            ctypes.c_void_p,
+            ctypes.c_uint32,
+            ctypes.POINTER(ctypes.c_uint8),
+            ctypes.c_uint8,
+        ]
+        lib.sbgc_py_get_realtime_data_custom.restype = ctypes.c_int
 
         lib.sbgc_py_copy_last_tx.argtypes = [ctypes.c_void_p, ctypes.POINTER(ctypes.c_uint8), ctypes.c_uint16]
         lib.sbgc_py_copy_last_tx.restype = ctypes.c_uint16
@@ -496,6 +504,7 @@ class NativeLibrary:
             self._raw_script_debug_devices.discard(device)
             self._raw_realtime_data_3_devices.discard(device)
             self._raw_realtime_data_4_devices.discard(device)
+            self._raw_realtime_data_custom_devices.discard(device)
             if transport is not None:
                 transport.close()
 
@@ -511,6 +520,7 @@ class NativeLibrary:
         self._raw_script_debug_devices.discard(device)
         self._raw_realtime_data_3_devices.discard(device)
         self._raw_realtime_data_4_devices.discard(device)
+        self._raw_realtime_data_custom_devices.discard(device)
 
     def reset(self, device: int, flags: int, delay_ms: int) -> None:
         status = self._library.sbgc_py_reset(device, flags, delay_ms)
@@ -630,6 +640,49 @@ class NativeLibrary:
 
     def get_realtime_data(self, device: int) -> NativeRealtimeData:
         return self.get_realtime_data_3()
+
+    def get_realtime_data_custom(self, device: int, flags: int, payload_size: int) -> bytes:
+        if not 2 <= payload_size <= 0xFF:
+            raise ValueError("payload_size must be in range 2..255")
+        if device in self._raw_realtime_data_custom_devices:
+            return self._get_realtime_data_custom_raw(device, flags, payload_size)
+
+        result = (ctypes.c_uint8 * (payload_size + 4))()
+        status = self._library.sbgc_py_get_realtime_data_custom(
+            device, flags, result, payload_size
+        )
+        if status == NativeStatus.OK:
+            return bytes(result[4:])
+        if status == NativeStatus.MODULE_DISABLED:
+            raise NativeError(
+                "REALTIME_DATA_CUSTOM is unavailable: SBGC_REALTIME_MODULE is "
+                "disabled in serialAPI_Config.h."
+            )
+
+        self.recover(device)
+        try:
+            value = self._get_realtime_data_custom_raw(device, flags, payload_size)
+        except NativeError:
+            raise NativeError(
+                f"REALTIME_DATA_CUSTOM failed with native status {status}. "
+                f"Last exchange: {self.last_exchange(device)}"
+            ) from None
+        self._raw_realtime_data_custom_devices.add(device)
+        return value
+
+    def _get_realtime_data_custom_raw(
+        self, device: int, flags: int, payload_size: int
+    ) -> bytes:
+        payload = self._transports[device].request(
+            0x58, struct.pack("<I", flags) + b"\x00" * 6
+        )
+        if payload is None or len(payload) != payload_size:
+            received_size = "-" if payload is None else str(len(payload))
+            raise NativeError(
+                "REALTIME_DATA_CUSTOM direct serial fallback received "
+                f"{received_size} bytes; expected {payload_size}."
+            )
+        return payload
 
     def _get_realtime_data(self, device: int, version: int) -> NativeRealtimeData:
         raw_devices = (

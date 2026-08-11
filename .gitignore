@@ -1,0 +1,14 @@
+# Local environments and generated build outputs
+/build/
+/.venv/
+/.venv-new/
+/src/sbgc32.egg-info/
+
+# IDE project settings
+/.idea/
+
+# Local documentation and source materials
+/docs/
+
+# Workspace for test
+Test.py

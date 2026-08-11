@@ -8,7 +8,7 @@ class Command(IntEnum):
     CMD_RUN_SCRIPT              = 57    # Start or stop user-written script +
     CMD_EXECUTE_MENU            = 69    # Execute menu command
 
-    CMD_REALTIME_DATA           = 68    # Request real-time data !
+    CMD_REALTIME_DATA           = 68    # Request real-time data +
     CMD_REALTIME_DATA_3         = 23    # Request real-time data +
     CMD_REALTIME_DATA_4         = 25    # Receive extended version of real-time data +
     CMD_REALTIME_DATA_CUSTOM    = 88    # Request configurable realtime data
@@ -19,8 +19,8 @@ class Command(IntEnum):
     CMD_SET_ADJ_VARS_VAL        = 31    # Update the value of selected parameter(-s)
     CMD_GET_ADJ_VARS_VAL        = 64    # Query the actual value of selected parameter(-s)
 
-    CMD_MOTORS_ON               = 77    # Switch motors ON
-    CMD_MOTORS_OFF              = 109   # Switch motors OFF
+    CMD_MOTORS_ON               = 77    # Switch motors ON +
+    CMD_MOTORS_OFF              = 109   # Switch motors OFF +
     
     CMD_BEEP_SOUND              = 89    # Play melody by motors or emit standard beep sound
     CMD_CONTROL_CONFIG          = 90    # Configure the handling of CMD_CONTROL command

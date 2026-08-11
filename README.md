@@ -10,7 +10,13 @@ commands through a small Python interface.
 
 Files Description
 -----------------
+[src/](src) - the kernel library files;
 
+[native/](native) - facade between C and Python;
+
+[vendor/](vendor) - main serialAPI library;
+
+[examples/](examples) - how to use library;
 
 Requirements
 ------------

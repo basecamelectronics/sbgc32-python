@@ -1,13 +1,59 @@
 from dataclasses import dataclass
-from enum import IntEnum
+from enum import IntEnum, IntFlag
+from typing import Mapping
 
-
+# Stopping mode accepted by CMD_MOTORS_OFF
 class MotorsOffMode(IntEnum):
-    """Stopping mode accepted by CMD_MOTORS_OFF."""
-
     NORMAL = 0
     BREAK = 1
     SAFE_STOP = 2
+
+
+class RealtimeDataCustomFlag(IntFlag):
+    """Fields requested through CMD_REALTIME_DATA_CUSTOM."""
+
+    IMU_ANGLES = 1 << 0
+    TARGET_ANGLES = 1 << 1
+    TARGET_SPEED = 1 << 2
+    STATOR_ROTOR_ANGLE = 1 << 3
+    GYRO_DATA = 1 << 4
+    RC_DATA = 1 << 5
+    Z_VECTOR_H_VECTOR = 1 << 6
+    RC_CHANNELS = 1 << 7
+    ACC_DATA = 1 << 8
+    MOTOR4_CONTROL = 1 << 9
+    AHRS_DEBUG_INFO = 1 << 10
+    ENCODER_RAW24 = 1 << 11
+    IMU_ANGLES_RAD = 1 << 12
+    SCRIPT_VARS_FLOAT = 1 << 13
+    SCRIPT_VARS_INT16 = 1 << 14
+    SYSTEM_POWER_STATE = 1 << 15
+    FRAME_CAM_RATE = 1 << 16
+    IMU_ANGLES_20 = 1 << 17
+    TARGET_ANGLES_20 = 1 << 18
+    COMM_ERRORS = 1 << 19
+    SYSTEM_STATE = 1 << 20
+    IMU_QUAT = 1 << 21
+    TARGET_QUAT = 1 << 22
+    IMU_TO_FRAME_QUAT = 1 << 23
+    ADC_CH_RAW = 1 << 24
+    SW_LIMITS_DIST = 1 << 25
+    FOLLOW_DIST = 1 << 26
+    EXT_TARGET_LIMIT = 1 << 27
+
+
+@dataclass(frozen=True, slots=True)
+class RealtimeDataCustom:
+    """Result of a configurable CMD_REALTIME_DATA_CUSTOM request.
+
+    ``fields`` is indexed by :class:`RealtimeDataCustomFlag`. Composite fields
+    without a stable public Python structure are returned as raw ``bytes``.
+    """
+
+    flags: RealtimeDataCustomFlag
+    timestamp_ms: int
+    fields: Mapping[RealtimeDataCustomFlag, object]
+    raw_payload: bytes
 
 # Values for roll, pitch, and yaw
 @dataclass(frozen=True, slots=True)
