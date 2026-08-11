@@ -1,9 +1,0 @@
-C:\Basecam\python_serialAPI\native\sbgc_python.c;C:\Basecam\python_serialAPI\native\build\sbgc_python.dir\Release\sbgc_python.obj
-C:\Basecam\python_serialAPI\vendor\serialAPI\sbgc32.c;C:\Basecam\python_serialAPI\native\build\sbgc_python.dir\Release\sbgc32.obj
-C:\Basecam\python_serialAPI\vendor\serialAPI\core\commandBuild.c;C:\Basecam\python_serialAPI\native\build\sbgc_python.dir\Release\commandBuild.obj
-C:\Basecam\python_serialAPI\vendor\serialAPI\core\lowLayer.c;C:\Basecam\python_serialAPI\native\build\sbgc_python.dir\Release\lowLayer.obj
-C:\Basecam\python_serialAPI\vendor\serialAPI\core\debug\debug.c;C:\Basecam\python_serialAPI\native\build\sbgc_python.dir\Release\debug.obj
-C:\Basecam\python_serialAPI\vendor\serialAPI\core\highLayer\highLayer.c;C:\Basecam\python_serialAPI\native\build\sbgc_python.dir\Release\highLayer.obj
-C:\Basecam\python_serialAPI\vendor\serialAPI\core\parser\parser.c;C:\Basecam\python_serialAPI\native\build\sbgc_python.dir\Release\parser.obj
-C:\Basecam\python_serialAPI\vendor\serialAPI\modules\realtime\realtime.c;C:\Basecam\python_serialAPI\native\build\sbgc_python.dir\Release\realtime.obj
-C:\Basecam\python_serialAPI\vendor\serialAPI\modules\service\service.c;C:\Basecam\python_serialAPI\native\build\sbgc_python.dir\Release\service.obj
