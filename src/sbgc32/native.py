@@ -23,6 +23,7 @@ class NativeStatus(IntEnum):
     OPEN_FAILED = -4
     COMMUNICATION_ERROR = -5
     MODULE_DISABLED = -6
+    CONFIRMATION_DISABLED = -7
 
 
 class NativeAxis3(ctypes.Structure):
@@ -63,6 +64,50 @@ class NativeScriptDebugInfo(ctypes.Structure):
     _fields_ = [
         ("current_command_counter", ctypes.c_uint16),
         ("error_code", ctypes.c_uint8),
+    ]
+
+
+class NativeConfirmation(ctypes.Structure):
+    _pack_ = 1
+    _fields_ = [
+        ("command_id", ctypes.c_uint8),
+        ("status", ctypes.c_uint8),
+        ("command_data", ctypes.c_uint16),
+        ("error_code", ctypes.c_uint8),
+        ("error_data", ctypes.c_uint8 * 4),
+    ]
+
+
+class NativeAdjustableVariable(ctypes.Structure):
+    _pack_ = 1
+    _fields_ = [
+        ("id", ctypes.c_uint8),
+        ("value", ctypes.c_int32),
+    ]
+
+
+class NativeControlAxisConfig(ctypes.Structure):
+    _pack_ = 1
+    _fields_ = [
+        ("angle_lpf", ctypes.c_uint8),
+        ("speed_lpf", ctypes.c_uint8),
+        ("rc_lpf", ctypes.c_uint8),
+        ("acceleration_limit", ctypes.c_uint16),
+        ("jerk_slope", ctypes.c_uint8),
+        ("reserved", ctypes.c_uint8),
+    ]
+
+
+class NativeControlConfig(ctypes.Structure):
+    _pack_ = 1
+    _fields_ = [
+        ("timeout_ms", ctypes.c_uint16),
+        ("channel_priorities", ctypes.c_uint8 * 5),
+        ("axis", NativeControlAxisConfig * 3),
+        ("rc_expo_rate", ctypes.c_uint8),
+        ("flags", ctypes.c_uint16),
+        ("euler_order", ctypes.c_uint8),
+        ("reserved", ctypes.c_uint8 * 9),
     ]
 
 
@@ -133,6 +178,7 @@ class NativeBoardInfo(ctypes.Structure):
         ("base_firmware_ver", ctypes.c_uint16),
     ]
 
+
 class NativeBoardInfo3(ctypes.Structure):
     _pack_ = 1
     _fields_ = [
@@ -178,7 +224,7 @@ TimeCallback = ctypes.CFUNCTYPE(ctypes.c_uint32, ctypes.c_void_p)
 
 
 class _PySerialTransport:
-    """Synchronous serial transport used by the native Serial API callbacks."""
+    """Synchronous serial transport used by the native Serial API callbacks"""
 
     def __init__(self, port: str, baudrate: int) -> None:
         try:
@@ -248,8 +294,19 @@ class _PySerialTransport:
         if self._serial.is_open:
             self._serial.close()
 
-    def request(self, command_id: int, payload: bytes = b"", timeout: float = 0.3) -> bytes | None:
-        """Send a SimpleBGC v2 command and return its validated payload."""
+    def request(
+        self,
+        command_id: int,
+        payload: bytes = b"",
+        timeout: float = 0.3,
+        *,
+        response_command_id: int | None = None,
+    ) -> bytes | None:
+        """Send a SimpleBGC v2 command and return its validated payload.
+
+        Most request commands reply with the same ID.  Some commands, such as
+        CMD_GET_ADJ_VARS_VAL, return a different command ID instead.
+        """
         header = bytes((command_id, len(payload), (command_id + len(payload)) & 0xFF))
         frame = b"\x24" + header + payload + struct.pack("<H", _crc16(header + payload))
 
@@ -258,6 +315,7 @@ class _PySerialTransport:
         if not self.write(frame):
             return None
 
+        expected_command_id = command_id if response_command_id is None else response_command_id
         deadline = monotonic_ns() + int(timeout * 1_000_000_000)
         while monotonic_ns() < deadline:
             with self._buffer_lock:
@@ -271,7 +329,7 @@ class _PySerialTransport:
                         response_payload = packet[4:-2]
                         expected_crc = struct.unpack("<H", packet[-2:])[0]
                         if (
-                            response_id == command_id
+                            response_id == expected_command_id
                             and payload_size == len(response_payload)
                             and header_checksum == (response_id + payload_size) & 0xFF
                             and expected_crc == _crc16(packet[1:-2])
@@ -281,7 +339,7 @@ class _PySerialTransport:
         return None
 
     def wait_for_command(self, command_id: int, timeout: float) -> bytes | None:
-        """Wait for a validated unsolicited SimpleBGC v2 command packet."""
+        """Wait for a validated unsolicited SimpleBGC v2 command packet"""
         deadline = monotonic_ns() + int(timeout * 1_000_000_000)
         while monotonic_ns() < deadline:
             with self._buffer_lock:
@@ -307,6 +365,7 @@ class _PySerialTransport:
 
 def _crc16(data: bytes) -> int:
     """SimpleBGC v2 CRC-16"""
+
     value = 0
     for byte in data:
         for mask in (1, 2, 4, 8, 16, 32, 64, 128):
@@ -391,6 +450,7 @@ class NativeLibrary:
         self._raw_realtime_data_3_devices: set[int] = set()
         self._raw_realtime_data_4_devices: set[int] = set()
         self._raw_realtime_data_custom_devices: set[int] = set()
+        self._raw_adj_var_devices: set[int] = set()
 
     def _configure_functions(self) -> None:
         lib = self._library
@@ -409,11 +469,13 @@ class NativeLibrary:
         lib.sbgc_py_recover.argtypes = [ctypes.c_void_p]
         lib.sbgc_py_recover.restype = ctypes.c_int
 
+
         lib.sbgc_py_get_angles.argtypes = [
             ctypes.c_void_p,
             ctypes.POINTER(NativeAngles)
         ]
         lib.sbgc_py_get_angles.restype = ctypes.c_int
+
 
         lib.sbgc_py_get_angles_ext.argtypes = [
             ctypes.c_void_p,
@@ -421,11 +483,13 @@ class NativeLibrary:
         ]
         lib.sbgc_py_get_angles_ext.restype = ctypes.c_int
 
+
         lib.sbgc_py_get_board_info.argtypes = [
             ctypes.c_void_p,
             ctypes.POINTER(NativeBoardInfo),
         ]
         lib.sbgc_py_get_board_info.restype = ctypes.c_int
+
 
         lib.sbgc_py_get_board_info_3.argtypes = [
             ctypes.c_void_p,
@@ -433,14 +497,70 @@ class NativeLibrary:
         ]
         lib.sbgc_py_get_board_info_3.restype = ctypes.c_int
 
+
         lib.sbgc_py_reset.argtypes = [ctypes.c_void_p, ctypes.c_uint8, ctypes.c_uint16]
         lib.sbgc_py_reset.restype = ctypes.c_int
         lib.sbgc_py_expect_reset.argtypes = [ctypes.c_void_p]
         lib.sbgc_py_expect_reset.restype = ctypes.c_int
+
+
         lib.sbgc_py_motors_on.argtypes = [ctypes.c_void_p]
         lib.sbgc_py_motors_on.restype = ctypes.c_int
+
+
         lib.sbgc_py_motors_off.argtypes = [ctypes.c_void_p, ctypes.c_uint8]
         lib.sbgc_py_motors_off.restype = ctypes.c_int
+
+
+        lib.sbgc_py_control.argtypes = [
+            ctypes.c_void_p,
+            ctypes.POINTER(ctypes.c_uint8),
+            ctypes.POINTER(ctypes.c_int16),
+            ctypes.POINTER(ctypes.c_int16),
+            ctypes.c_uint8,
+            ctypes.POINTER(NativeConfirmation),
+        ]
+        lib.sbgc_py_control.restype = ctypes.c_int
+
+
+        lib.sbgc_py_control_config.argtypes = [
+            ctypes.c_void_p,
+            ctypes.POINTER(NativeControlConfig),
+            ctypes.c_uint8,
+            ctypes.POINTER(NativeConfirmation),
+        ]
+        lib.sbgc_py_control_config.restype = ctypes.c_int
+
+
+        lib.sbgc_py_get_adj_vars.argtypes = [
+            ctypes.c_void_p,
+            ctypes.POINTER(ctypes.c_uint8),
+            ctypes.c_uint8,
+            ctypes.POINTER(NativeAdjustableVariable),
+        ]
+        lib.sbgc_py_get_adj_vars.restype = ctypes.c_int
+
+
+        lib.sbgc_py_set_adj_vars.argtypes = [
+            ctypes.c_void_p,
+            ctypes.POINTER(NativeAdjustableVariable),
+            ctypes.c_uint8,
+            ctypes.c_uint8,
+            ctypes.POINTER(NativeConfirmation),
+        ]
+        lib.sbgc_py_set_adj_vars.restype = ctypes.c_int
+
+
+        lib.sbgc_py_save_adj_vars.argtypes = [
+            ctypes.c_void_p,
+            ctypes.POINTER(ctypes.c_uint8),
+            ctypes.c_uint8,
+            ctypes.c_uint8,
+            ctypes.POINTER(NativeConfirmation),
+        ]
+        lib.sbgc_py_save_adj_vars.restype = ctypes.c_int
+
+
         lib.sbgc_py_run_script.argtypes = [ctypes.c_void_p, ctypes.c_uint8, ctypes.c_uint8]
         lib.sbgc_py_run_script.restype = ctypes.c_int
         lib.sbgc_py_read_script_debug_info.argtypes = [
@@ -448,16 +568,22 @@ class NativeLibrary:
             ctypes.POINTER(NativeScriptDebugInfo),
         ]
         lib.sbgc_py_read_script_debug_info.restype = ctypes.c_int
+
+
         lib.sbgc_py_get_realtime_data_3.argtypes = [
             ctypes.c_void_p,
             ctypes.POINTER(NativeRealtimeData),
         ]
         lib.sbgc_py_get_realtime_data_3.restype = ctypes.c_int
+
+
         lib.sbgc_py_get_realtime_data_4.argtypes = [
             ctypes.c_void_p,
             ctypes.POINTER(NativeRealtimeData),
         ]
         lib.sbgc_py_get_realtime_data_4.restype = ctypes.c_int
+
+
         lib.sbgc_py_get_realtime_data_custom.argtypes = [
             ctypes.c_void_p,
             ctypes.c_uint32,
@@ -505,6 +631,7 @@ class NativeLibrary:
             self._raw_realtime_data_3_devices.discard(device)
             self._raw_realtime_data_4_devices.discard(device)
             self._raw_realtime_data_custom_devices.discard(device)
+            self._raw_adj_var_devices.discard(device)
             if transport is not None:
                 transport.close()
 
@@ -521,6 +648,7 @@ class NativeLibrary:
         self._raw_realtime_data_3_devices.discard(device)
         self._raw_realtime_data_4_devices.discard(device)
         self._raw_realtime_data_custom_devices.discard(device)
+        self._raw_adj_var_devices.discard(device)
 
     def reset(self, device: int, flags: int, delay_ms: int) -> None:
         status = self._library.sbgc_py_reset(device, flags, delay_ms)
@@ -583,6 +711,215 @@ class NativeLibrary:
             )
         raise NativeError(
             f"MOTORS_OFF failed with native status {status}. "
+            f"Last exchange: {self.last_exchange(device)}"
+        )
+
+    def control(
+        self, device: int, modes: tuple[int, int, int], speeds: tuple[int, int, int],
+        angles: tuple[int, int, int], *, need_confirmation: bool = False,
+    ) -> NativeConfirmation | None:
+        native_modes = (ctypes.c_uint8 * 3)(*modes)
+        native_speeds = (ctypes.c_int16 * 3)(*speeds)
+        native_angles = (ctypes.c_int16 * 3)(*angles)
+        confirmation = NativeConfirmation() if need_confirmation else None
+        status = self._library.sbgc_py_control(
+            device,
+            native_modes,
+            native_speeds,
+            native_angles,
+            need_confirmation,
+            ctypes.byref(confirmation) if confirmation is not None else None,
+        )
+        if status == NativeStatus.OK:
+            return confirmation
+        if status == NativeStatus.CONFIRMATION_DISABLED:
+            raise NativeError(
+                "CONTROL confirmation is unavailable: SBGC_NEED_CONFIRM_CMD is "
+                "disabled in serialAPI_Config.h."
+            )
+        if status == NativeStatus.MODULE_DISABLED:
+            raise NativeError(
+                "CONTROL is unavailable: SBGC_CONTROL_MODULE is disabled "
+                "in serialAPI_Config.h."
+            )
+        # Never retry a control command: a failed status can still mean the
+        # board received it, and a duplicate may cause an unintended movement.
+        raise NativeError(
+            f"CONTROL failed with native status {status}. "
+            f"Last exchange: {self.last_exchange(device)}"
+        )
+
+    def control_config(
+        self,
+        device: int,
+        config: NativeControlConfig,
+        *,
+        need_confirmation: bool = False,
+    ) -> NativeConfirmation | None:
+        confirmation = NativeConfirmation() if need_confirmation else None
+        status = self._library.sbgc_py_control_config(
+            device,
+            ctypes.byref(config),
+            need_confirmation,
+            ctypes.byref(confirmation) if confirmation is not None else None,
+        )
+        if status == NativeStatus.OK:
+            return confirmation
+        if status == NativeStatus.CONFIRMATION_DISABLED:
+            raise NativeError(
+                "CONTROL_CONFIG confirmation is unavailable: SBGC_NEED_CONFIRM_CMD "
+                "is disabled in serialAPI_Config.h."
+            )
+        if status == NativeStatus.MODULE_DISABLED:
+            raise NativeError(
+                "CONTROL_CONFIG is unavailable: SBGC_CONTROL_MODULE is disabled "
+                "in serialAPI_Config.h."
+            )
+        raise NativeError(
+            f"CONTROL_CONFIG failed with native status {status}. "
+            f"Last exchange: {self.last_exchange(device)}"
+        )
+
+    def get_adj_vars(
+        self, device: int, ids: tuple[int, ...]
+    ) -> tuple[NativeAdjustableVariable, ...]:
+        if device in self._raw_adj_var_devices:
+            result = self._get_adj_vars_raw(device, ids)
+            if result is not None:
+                return result
+            raise NativeError(
+                "GET_ADJ_VARS_VAL did not return a valid response in direct serial fallback mode."
+            )
+
+        native_ids = (ctypes.c_uint8 * len(ids))(*ids)
+        result = (NativeAdjustableVariable * len(ids))()
+        status = self._library.sbgc_py_get_adj_vars(
+            device, native_ids, len(ids), result
+        )
+        if status == NativeStatus.OK:
+            return tuple(result)
+        if status == NativeStatus.MODULE_DISABLED:
+            raise NativeError(
+                "GET_ADJ_VARS_VAL is unavailable: SBGC_ADJVAR_MODULE is disabled "
+                "in serialAPI_Config.h."
+            )
+        # CMD_GET_ADJ_VARS_VAL replies with CMD_SET_ADJ_VARS_VAL.  A few
+        # controller/firmware combinations send this valid response but do not
+        # complete the linked SerialAPI transaction. Fall back to the same wire
+        # protocol in Python; it is read-only and validates both packet CRC and
+        # the returned ID order.
+        self._raw_adj_var_devices.add(device)
+        raw_result = self._get_adj_vars_raw(device, ids)
+        if raw_result is not None:
+            return raw_result
+        raise NativeError(
+            f"GET_ADJ_VARS_VAL failed with native status {status}. "
+            f"Last exchange: {self.last_exchange(device)}"
+        )
+
+    def _get_adj_vars_raw(
+        self, device: int, ids: tuple[int, ...]
+    ) -> tuple[NativeAdjustableVariable, ...] | None:
+        def request(requested_ids: tuple[int, ...]) -> tuple[NativeAdjustableVariable, ...] | None:
+            payload = bytes((len(requested_ids), *requested_ids))
+            response = self._transports[device].request(
+                0x40, payload, response_command_id=0x1F
+            )
+            expected_size = 1 + 5 * len(requested_ids)
+            if response is None or len(response) != expected_size or response[0] != len(requested_ids):
+                return None
+            values = tuple(
+                NativeAdjustableVariable(
+                    id=response[offset],
+                    value=struct.unpack_from("<i", response, offset + 1)[0],
+                )
+                for offset in range(1, len(response), 5)
+            )
+            if tuple(item.id for item in values) != requested_ids:
+                return None
+            return values
+
+        result = request(ids)
+        if result is not None or len(ids) == 1:
+            return result
+        # The custom SBGC32 board on COM7 accepts a single variable per
+        # request, but ignores a valid multi-variable packet. Preserve the
+        # public batch API by issuing independent safe reads when needed.
+        values: list[NativeAdjustableVariable] = []
+        for id in ids:
+            item = request((id,))
+            if item is None:
+                return None
+            values.extend(item)
+        return tuple(values)
+
+    def set_adj_vars(
+        self,
+        device: int,
+        variables: tuple[NativeAdjustableVariable, ...],
+        *,
+        need_confirmation: bool = False,
+    ) -> NativeConfirmation | None:
+        native_variables = (NativeAdjustableVariable * len(variables))(*variables)
+        confirmation = NativeConfirmation() if need_confirmation else None
+        status = self._library.sbgc_py_set_adj_vars(
+            device,
+            native_variables,
+            len(variables),
+            need_confirmation,
+            ctypes.byref(confirmation) if confirmation is not None else None,
+        )
+        if status == NativeStatus.OK:
+            return confirmation
+        if status == NativeStatus.CONFIRMATION_DISABLED:
+            raise NativeError(
+                "SET_ADJ_VARS_VAL confirmation is unavailable: SBGC_NEED_CONFIRM_CMD "
+                "is disabled in serialAPI_Config.h."
+            )
+        if status == NativeStatus.MODULE_DISABLED:
+            raise NativeError(
+                "SET_ADJ_VARS_VAL is unavailable: SBGC_ADJVAR_MODULE is disabled "
+                "in serialAPI_Config.h."
+            )
+        # A failed status can still mean the board applied the new value.
+        # Retrying could write the parameter twice, so it is deliberately avoided.
+        raise NativeError(
+            f"SET_ADJ_VARS_VAL failed with native status {status}. "
+            f"Last exchange: {self.last_exchange(device)}"
+        )
+
+    def save_adj_vars(
+        self,
+        device: int,
+        ids: tuple[int, ...] | None,
+        *,
+        need_confirmation: bool = False,
+    ) -> NativeConfirmation | None:
+        native_ids = (ctypes.c_uint8 * len(ids))(*ids) if ids is not None else None
+        confirmation = NativeConfirmation() if need_confirmation else None
+        status = self._library.sbgc_py_save_adj_vars(
+            device,
+            native_ids,
+            len(ids) if ids is not None else 0,
+            need_confirmation,
+            ctypes.byref(confirmation) if confirmation is not None else None,
+        )
+        if status == NativeStatus.OK:
+            return confirmation
+        if status == NativeStatus.CONFIRMATION_DISABLED:
+            raise NativeError(
+                "SAVE_PARAMS_3 confirmation is unavailable: SBGC_NEED_CONFIRM_CMD "
+                "is disabled in serialAPI_Config.h."
+            )
+        if status == NativeStatus.MODULE_DISABLED:
+            raise NativeError(
+                "SAVE_PARAMS_3 is unavailable: SBGC_ADJVAR_MODULE is disabled "
+                "in serialAPI_Config.h."
+            )
+        # The board can have already committed the EEPROM write even when a
+        # transport error is reported. Never retry it automatically.
+        raise NativeError(
+            f"SAVE_PARAMS_3 failed with native status {status}. "
             f"Last exchange: {self.last_exchange(device)}"
         )
 

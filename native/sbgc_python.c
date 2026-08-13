@@ -12,10 +12,26 @@
 #endif
 #include "sbgc32.h"
 
+/* A CMD_CONTROL frame is not retransmitted if its confirmation is delayed.
+   Only the receive side may be retried: retransmitting a position command can
+   unintentionally repeat a physical movement. */
+#define SBGC_PY_CONTROL_CONFIRM_ATTEMPTS 3
+
 #if (SBGC_REALTIME_MODULE)
 _Static_assert(
     sizeof(sbgc_py_realtime_data_t) == sizeof(sbgcRealTimeData_t),
     "sbgc_py_realtime_data_t must match sbgcRealTimeData_t"
+);
+#endif
+
+#if (SBGC_CONTROL_MODULE)
+_Static_assert(
+    sizeof(sbgc_py_control_axis_config_t) == sizeof(sbgcAxisCCtrl_t),
+    "sbgc_py_control_axis_config_t must match sbgcAxisCCtrl_t"
+);
+_Static_assert(
+    sizeof(sbgc_py_control_config_t) == sizeof(sbgcControlConfig_t),
+    "sbgc_py_control_config_t must match sbgcControlConfig_t"
 );
 #endif
 
@@ -633,6 +649,376 @@ sbgc_py_status_t sbgc_py_motors_off (sbgc_py_device_t *device, uint8_t mode)
 #else
     (void)device;
     (void)mode;
+    return SBGC_PY_MODULE_DISABLED;
+#endif
+}
+
+
+sbgc_py_status_t sbgc_py_control (
+    sbgc_py_device_t *device,
+    const uint8_t modes[3],
+    const int16_t speeds[3],
+    const int16_t angles[3],
+    uint8_t need_confirmation,
+    sbgc_py_confirmation_t *confirmation
+)
+{
+#if (SBGC_CONTROL_MODULE)
+    sbgcControl_t native_control = { 0 };
+    sbgcCommandStatus_t status;
+    uint8_t axis;
+
+    if (device == NULL || modes == NULL || speeds == NULL || angles == NULL)
+        return SBGC_PY_INVALID_ARGUMENT;
+    if (!device->connected)
+        return SBGC_PY_NOT_CONNECTED;
+    if (current_device != device)
+        return SBGC_PY_ERROR;
+
+    for (axis = 0; axis < 3; ++axis)
+    {
+        native_control.mode[axis] = modes[axis];
+        native_control.AxisC[axis].speed = speeds[axis];
+        native_control.AxisC[axis].angle = angles[axis];
+    }
+
+    device->last_tx_size = 0;
+    device->last_rx_size = 0;
+    status = SBGC32_Control(&device->serial_api, &native_control);
+    if (status != sbgcCOMMAND_OK ||
+        device->serial_api._lastSerialCommandStatus != serialAPI_TX_RX_OK)
+        return SBGC_PY_COMMUNICATION_ERROR;
+
+    if (!need_confirmation)
+        return SBGC_PY_OK;
+
+#if (SBGC_NEED_CONFIRM_CMD)
+    {
+        sbgcConfirm_t native_confirmation = { 0 };
+        uint8_t attempt;
+
+        if (confirmation == NULL)
+            return SBGC_PY_INVALID_ARGUMENT;
+
+        for (attempt = 0; attempt < SBGC_PY_CONTROL_CONFIRM_ATTEMPTS; ++attempt)
+        {
+            memset(&native_confirmation, 0, sizeof(native_confirmation));
+            status = SBGC32_CheckConfirmation(
+                &device->serial_api, &native_confirmation, CMD_CONTROL
+            );
+            if (status == sbgcCOMMAND_OK &&
+                device->serial_api._lastSerialCommandStatus == serialAPI_TX_RX_OK)
+                break;
+
+            /* A timed-out CMD_CONFIRM may remain in SerialAPI's command
+               queue. Remove it before beginning a new receive-only wait. */
+            (void)SBGC32_DeleteCommand(&device->serial_api, CMD_CONFIRM);
+        }
+        if (attempt == SBGC_PY_CONTROL_CONFIRM_ATTEMPTS)
+            return SBGC_PY_COMMUNICATION_ERROR;
+
+        confirmation->command_id = native_confirmation.commandID;
+        confirmation->status = (uint8_t)native_confirmation.status;
+        confirmation->command_data = native_confirmation.cmdData;
+        confirmation->error_code = native_confirmation.errorCode;
+        memcpy(confirmation->error_data, native_confirmation.errorData,
+               sizeof(confirmation->error_data));
+    }
+    return SBGC_PY_OK;
+#else
+    (void)confirmation;
+    return SBGC_PY_CONFIRMATION_DISABLED;
+#endif
+
+#else
+    (void)device;
+    (void)modes;
+    (void)speeds;
+    (void)angles;
+    (void)need_confirmation;
+    (void)confirmation;
+    return SBGC_PY_MODULE_DISABLED;
+#endif
+}
+
+
+sbgc_py_status_t sbgc_py_control_config (
+    sbgc_py_device_t *device,
+    const sbgc_py_control_config_t *config,
+    uint8_t need_confirmation,
+    sbgc_py_confirmation_t *confirmation
+)
+{
+#if (SBGC_CONTROL_MODULE)
+    sbgcControlConfig_t native_config = { 0 };
+    sbgcCommandStatus_t status;
+    uint8_t axis;
+
+    if (device == NULL || config == NULL)
+        return SBGC_PY_INVALID_ARGUMENT;
+    if (!device->connected)
+        return SBGC_PY_NOT_CONNECTED;
+    if (current_device != device)
+        return SBGC_PY_ERROR;
+    if (need_confirmation && confirmation == NULL)
+        return SBGC_PY_INVALID_ARGUMENT;
+
+    native_config.timeoutMS = config->timeout_ms;
+    native_config.ch1_Priority = config->channel_priorities[0];
+    native_config.ch2_Priority = config->channel_priorities[1];
+    native_config.ch3_Priority = config->channel_priorities[2];
+    native_config.ch4_Priority = config->channel_priorities[3];
+    native_config.thisChPriority = config->channel_priorities[4];
+    for (axis = 0; axis < 3; ++axis)
+    {
+        native_config.AxisCCtrl[axis].angleLPF = config->axis[axis].angle_lpf;
+        native_config.AxisCCtrl[axis].speedLPF = config->axis[axis].speed_lpf;
+        native_config.AxisCCtrl[axis].RC_LPF = config->axis[axis].rc_lpf;
+        native_config.AxisCCtrl[axis].accLimit = config->axis[axis].acceleration_limit;
+        native_config.AxisCCtrl[axis].jerkSlope = config->axis[axis].jerk_slope;
+    }
+    native_config.RC_ExpoRate = config->rc_expo_rate;
+    native_config.flags = config->flags;
+    native_config.EulerOrder = config->euler_order;
+
+    device->last_tx_size = 0;
+    device->last_rx_size = 0;
+#if (SBGC_NEED_CONFIRM_CMD)
+    if (need_confirmation)
+    {
+        sbgcConfirm_t native_confirmation = { 0 };
+
+        status = SBGC32_ControlConfig(
+            &device->serial_api, &native_config, &native_confirmation
+        );
+        if (status != sbgcCOMMAND_OK ||
+            device->serial_api._lastSerialCommandStatus != serialAPI_TX_RX_OK)
+            return SBGC_PY_COMMUNICATION_ERROR;
+
+        confirmation->command_id = native_confirmation.commandID;
+        confirmation->status = (uint8_t)native_confirmation.status;
+        confirmation->command_data = native_confirmation.cmdData;
+        confirmation->error_code = native_confirmation.errorCode;
+        memcpy(confirmation->error_data, native_confirmation.errorData,
+               sizeof(confirmation->error_data));
+        return SBGC_PY_OK;
+    }
+#else
+    if (need_confirmation)
+        return SBGC_PY_CONFIRMATION_DISABLED;
+#endif
+
+    status = SBGC32_ControlConfig(&device->serial_api, &native_config, SBGC_NO_CONFIRM);
+    if (status != sbgcCOMMAND_OK ||
+        device->serial_api._lastSerialCommandStatus != serialAPI_TX_RX_OK)
+        return SBGC_PY_COMMUNICATION_ERROR;
+    return SBGC_PY_OK;
+#else
+    (void)device;
+    (void)config;
+    (void)need_confirmation;
+    (void)confirmation;
+    return SBGC_PY_MODULE_DISABLED;
+#endif
+}
+
+
+sbgc_py_status_t sbgc_py_get_adj_vars (
+    sbgc_py_device_t *device,
+    const uint8_t *ids,
+    uint8_t count,
+    sbgc_py_adjustable_variable_t *result
+)
+{
+#if (SBGC_ADJVAR_MODULE)
+    sbgcAdjVarGeneral_t native_vars[SBGC_ADJ_VARS_MAX_NUM_PACKET] = { 0 };
+    sbgcCommandStatus_t status;
+    uint8_t index;
+
+    if (device == NULL || ids == NULL || result == NULL ||
+        count == 0 || count > SBGC_ADJ_VARS_MAX_NUM_PACKET)
+        return SBGC_PY_INVALID_ARGUMENT;
+    if (!device->connected)
+        return SBGC_PY_NOT_CONNECTED;
+    if (current_device != device)
+        return SBGC_PY_ERROR;
+
+    for (index = 0; index < count; ++index)
+        native_vars[index].ID = (sbgcAdjVarID_t)ids[index];
+
+    device->last_tx_size = 0;
+    device->last_rx_size = 0;
+    status = SBGC32_GetAdjVarValues(&device->serial_api, native_vars, count);
+    if (status != sbgcCOMMAND_OK ||
+        device->serial_api._lastSerialCommandStatus != serialAPI_TX_RX_OK)
+        return SBGC_PY_COMMUNICATION_ERROR;
+
+    for (index = 0; index < count; ++index)
+    {
+        result[index].id = (uint8_t)native_vars[index].ID;
+        result[index].value = native_vars[index].value;
+    }
+    return SBGC_PY_OK;
+#else
+    (void)device;
+    (void)ids;
+    (void)count;
+    (void)result;
+    return SBGC_PY_MODULE_DISABLED;
+#endif
+}
+
+
+sbgc_py_status_t sbgc_py_set_adj_vars (
+    sbgc_py_device_t *device,
+    const sbgc_py_adjustable_variable_t *variables,
+    uint8_t count,
+    uint8_t need_confirmation,
+    sbgc_py_confirmation_t *confirmation
+)
+{
+#if (SBGC_ADJVAR_MODULE)
+    sbgcAdjVarGeneral_t native_vars[SBGC_ADJ_VARS_MAX_NUM_PACKET] = { 0 };
+    sbgcCommandStatus_t status;
+    uint8_t index;
+
+    if (device == NULL || variables == NULL ||
+        count == 0 || count > SBGC_ADJ_VARS_MAX_NUM_PACKET)
+        return SBGC_PY_INVALID_ARGUMENT;
+    if (!device->connected)
+        return SBGC_PY_NOT_CONNECTED;
+    if (current_device != device)
+        return SBGC_PY_ERROR;
+    if (need_confirmation && confirmation == NULL)
+        return SBGC_PY_INVALID_ARGUMENT;
+
+    for (index = 0; index < count; ++index)
+    {
+        native_vars[index].ID = (sbgcAdjVarID_t)variables[index].id;
+        native_vars[index].value = variables[index].value;
+        native_vars[index].syncFlag = AV_NOT_SYNCHRONIZED;
+    }
+
+    device->last_tx_size = 0;
+    device->last_rx_size = 0;
+#if (SBGC_NEED_CONFIRM_CMD)
+    if (need_confirmation)
+    {
+        sbgcConfirm_t native_confirmation = { 0 };
+
+        status = SBGC32_SetAdjVarValues(
+            &device->serial_api, native_vars, count, &native_confirmation
+        );
+        if (status != sbgcCOMMAND_OK ||
+            device->serial_api._lastSerialCommandStatus != serialAPI_TX_RX_OK)
+            return SBGC_PY_COMMUNICATION_ERROR;
+
+        confirmation->command_id = native_confirmation.commandID;
+        confirmation->status = (uint8_t)native_confirmation.status;
+        confirmation->command_data = native_confirmation.cmdData;
+        confirmation->error_code = native_confirmation.errorCode;
+        memcpy(confirmation->error_data, native_confirmation.errorData,
+               sizeof(confirmation->error_data));
+        return SBGC_PY_OK;
+    }
+#else
+    if (need_confirmation)
+        return SBGC_PY_CONFIRMATION_DISABLED;
+#endif
+
+    status = SBGC32_SetAdjVarValues(
+        &device->serial_api, native_vars, count, SBGC_NO_CONFIRM
+    );
+    if (status != sbgcCOMMAND_OK ||
+        device->serial_api._lastSerialCommandStatus != serialAPI_TX_RX_OK)
+        return SBGC_PY_COMMUNICATION_ERROR;
+    return SBGC_PY_OK;
+#else
+    (void)device;
+    (void)variables;
+    (void)count;
+    (void)need_confirmation;
+    (void)confirmation;
+    return SBGC_PY_MODULE_DISABLED;
+#endif
+}
+
+
+sbgc_py_status_t sbgc_py_save_adj_vars (
+    sbgc_py_device_t *device,
+    const uint8_t *ids,
+    uint8_t count,
+    uint8_t need_confirmation,
+    sbgc_py_confirmation_t *confirmation
+)
+{
+#if (SBGC_ADJVAR_MODULE)
+    sbgcAdjVarGeneral_t native_vars[SBGC_ADJ_VARS_MAX_QUANTITY] = { 0 };
+    sbgcCommandStatus_t status;
+    uint8_t index;
+
+    if (device == NULL || count > SBGC_ADJ_VARS_MAX_QUANTITY ||
+        (count != 0 && ids == NULL))
+        return SBGC_PY_INVALID_ARGUMENT;
+    if (!device->connected)
+        return SBGC_PY_NOT_CONNECTED;
+    if (current_device != device)
+        return SBGC_PY_ERROR;
+    if (need_confirmation && confirmation == NULL)
+        return SBGC_PY_INVALID_ARGUMENT;
+
+    for (index = 0; index < count; ++index)
+    {
+        native_vars[index].ID = (sbgcAdjVarID_t)ids[index];
+        native_vars[index].saveFlag = AV_NOT_SAVED;
+    }
+
+    device->last_tx_size = 0;
+    device->last_rx_size = 0;
+#if (SBGC_NEED_CONFIRM_CMD)
+    if (need_confirmation)
+    {
+        sbgcConfirm_t native_confirmation = { 0 };
+
+        status = count == 0
+            ? SBGC32_SaveAllActiveAdjVarsToEEPROM(
+                &device->serial_api, &native_confirmation
+              )
+            : SBGC32_SaveAdjVarsToEEPROM(
+                &device->serial_api, native_vars, count, &native_confirmation
+              );
+        if (status != sbgcCOMMAND_OK ||
+            device->serial_api._lastSerialCommandStatus != serialAPI_TX_RX_OK)
+            return SBGC_PY_COMMUNICATION_ERROR;
+
+        confirmation->command_id = native_confirmation.commandID;
+        confirmation->status = (uint8_t)native_confirmation.status;
+        confirmation->command_data = native_confirmation.cmdData;
+        confirmation->error_code = native_confirmation.errorCode;
+        memcpy(confirmation->error_data, native_confirmation.errorData,
+               sizeof(confirmation->error_data));
+        return SBGC_PY_OK;
+    }
+#else
+    if (need_confirmation)
+        return SBGC_PY_CONFIRMATION_DISABLED;
+#endif
+
+    status = count == 0
+        ? SBGC32_SaveAllActiveAdjVarsToEEPROM(&device->serial_api, SBGC_NO_CONFIRM)
+        : SBGC32_SaveAdjVarsToEEPROM(
+            &device->serial_api, native_vars, count, SBGC_NO_CONFIRM
+          );
+    if (status != sbgcCOMMAND_OK ||
+        device->serial_api._lastSerialCommandStatus != serialAPI_TX_RX_OK)
+        return SBGC_PY_COMMUNICATION_ERROR;
+    return SBGC_PY_OK;
+#else
+    (void)device;
+    (void)ids;
+    (void)count;
+    (void)need_confirmation;
+    (void)confirmation;
     return SBGC_PY_MODULE_DISABLED;
 #endif
 }

@@ -1,5 +1,6 @@
 # Local environments and generated build outputs
 /build/
+/native/build/
 /.venv/
 /.venv-new/
 /src/sbgc32.egg-info/
@@ -12,3 +13,6 @@
 
 # Workspace for test
 Test.py
+
+__pycache__/
+*.py[cod]

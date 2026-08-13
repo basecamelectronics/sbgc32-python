@@ -43,7 +43,9 @@ typedef enum
     SBGC_PY_COMMUNICATION_ERROR = -5,
     /* The SerialAPI module required by the requested command is disabled
        in serialAPI_Config.h. */
-    SBGC_PY_MODULE_DISABLED     = -6
+    SBGC_PY_MODULE_DISABLED     = -6,
+    /* CMD_CONFIRM handling was requested but SBGC_NEED_CONFIRM_CMD is off. */
+    SBGC_PY_CONFIRMATION_DISABLED = -7
 
 }   sbgc_py_status_t;
 
@@ -92,6 +94,56 @@ typedef struct
     uint8_t                     error_code;
 
 }   sbgc_py_script_debug_info_t;
+
+
+typedef struct
+{
+    /* A portable snapshot of sbgcConfirm_t after CMD_CONFIRM or CMD_ERROR. */
+    uint8_t                     command_id;
+    uint8_t                     status;
+    uint16_t                    command_data;
+    uint8_t                     error_code;
+    uint8_t                     error_data[4];
+
+}   sbgc_py_confirmation_t;
+
+
+/* Wire-level integer adjustable variable used by CMD_SET/GET_ADJ_VARS_VAL. */
+typedef struct
+{
+    uint8_t                     id;
+    int32_t                     value;
+
+}   sbgc_py_adjustable_variable_t;
+
+
+/* Mirrors sbgcAxisCCtrl_t / sbgcControlConfig_t without SerialAPI-private
+   field names. All zero values retain the board defaults for the corresponding
+   optional control settings. */
+typedef struct
+{
+    uint8_t                     angle_lpf;
+    uint8_t                     speed_lpf;
+    uint8_t                     rc_lpf;
+    uint16_t                    acceleration_limit;
+    uint8_t                     jerk_slope;
+    uint8_t                     reserved;
+
+}   sbgc_py_control_axis_config_t;
+
+
+typedef struct
+{
+    uint16_t                    timeout_ms;
+    uint8_t                     channel_priorities[5];
+    sbgc_py_control_axis_config_t
+                                axis[3];
+    uint8_t                     rc_expo_rate;
+    uint16_t                    flags;
+    uint8_t                     euler_order;
+    uint8_t                     reserved[9];
+
+}   sbgc_py_control_config_t;
 
 
 typedef struct
@@ -225,6 +277,44 @@ SBGC_PY_API sbgc_py_status_t sbgc_py_expect_reset (sbgc_py_device_t *device);
    successful transmission, not the board's asynchronous CMD_CONFIRM packet. */
 SBGC_PY_API sbgc_py_status_t sbgc_py_motors_on (sbgc_py_device_t *device);
 SBGC_PY_API sbgc_py_status_t sbgc_py_motors_off (sbgc_py_device_t *device, uint8_t mode);
+/* Send the 15-byte CMD_CONTROL payload. No confirmation is expected here. */
+SBGC_PY_API sbgc_py_status_t sbgc_py_control (
+    sbgc_py_device_t *device,
+    const uint8_t modes[3],
+    const int16_t speeds[3],
+    const int16_t angles[3],
+    uint8_t need_confirmation,
+    sbgc_py_confirmation_t *confirmation
+);
+SBGC_PY_API sbgc_py_status_t sbgc_py_control_config (
+    sbgc_py_device_t *device,
+    const sbgc_py_control_config_t *config,
+    uint8_t need_confirmation,
+    sbgc_py_confirmation_t *confirmation
+);
+/* ``variables`` and ``result`` must have ``count`` entries; count is 1..40. */
+SBGC_PY_API sbgc_py_status_t sbgc_py_get_adj_vars (
+    sbgc_py_device_t *device,
+    const uint8_t *ids,
+    uint8_t count,
+    sbgc_py_adjustable_variable_t *result
+);
+SBGC_PY_API sbgc_py_status_t sbgc_py_set_adj_vars (
+    sbgc_py_device_t *device,
+    const sbgc_py_adjustable_variable_t *variables,
+    uint8_t count,
+    uint8_t need_confirmation,
+    sbgc_py_confirmation_t *confirmation
+);
+/* CMD_SAVE_PARAMS_3. ``count`` is 1..102 for selected IDs; zero saves all
+   active adjustable variables. */
+SBGC_PY_API sbgc_py_status_t sbgc_py_save_adj_vars (
+    sbgc_py_device_t *device,
+    const uint8_t *ids,
+    uint8_t count,
+    uint8_t need_confirmation,
+    sbgc_py_confirmation_t *confirmation
+);
 SBGC_PY_API sbgc_py_status_t sbgc_py_run_script (sbgc_py_device_t *device, uint8_t mode, uint8_t slot);
 SBGC_PY_API sbgc_py_status_t sbgc_py_read_script_debug_info (
     sbgc_py_device_t *device, sbgc_py_script_debug_info_t *script_debug_info

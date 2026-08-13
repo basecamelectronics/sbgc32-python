@@ -1,4 +1,4 @@
-from sbgc32 import SimpleBGC, MotorsOffMode
+from sbgc32 import SimpleBGC, MotorsOffMode, Command
 from sbgc32.native import NativeError
 from time import sleep
 
@@ -6,21 +6,26 @@ from time import sleep
 def main() -> None:
     print("Opening COM port...", flush=True)
 
-    with SimpleBGC(port="COM7", baudrate=115200) as gimbal:
+    with SimpleBGC(port="COM4", baudrate=115200) as gimbal:
 
         print("Connection established.", flush=True)
+
 
         # CMD_BOARD_INFO
 
         board = gimbal.get_board_info()
+
+        # Also you can use execute with parameters
+        # board = gimbal.execute(Command.CMD_BOARD_INFO)
+
         print(f"Board:    {board.board_version}")
         print(f"Firmware: {board.firmware_version}")
         print(f"Features: 0x{board.board_features:04X}")
 
-        sleep(0.5)
 
         # CMD_GET_ANGLES
 
+        sleep(0.5)
         try:
             while True:
                 try:

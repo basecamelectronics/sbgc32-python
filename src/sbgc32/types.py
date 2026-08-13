@@ -2,15 +2,122 @@ from dataclasses import dataclass
 from enum import IntEnum, IntFlag
 from typing import Mapping
 
-# Stopping mode accepted by CMD_MOTORS_OFF
+
 class MotorsOffMode(IntEnum):
+    """ Stopping mode accepted by CMD_MOTORS_OFF """
     NORMAL = 0
     BREAK = 1
     SAFE_STOP = 2
 
 
+class ControlMode(IntEnum):
+    """ Low four bits of one CMD_CONTROL axis mode byte """
+
+    NO_CONTROL                  = 0 # Give back control to RC
+    SPEED                       = 1 # Continuous rotation
+    ANGLE                       = 2 # Absolute angle
+    SPEED_ANGLE                 = 3 # Speed with position correction
+    RC                          = 4 # RC signal
+    ANGLE_REL_FRAME             = 5 # Angle relative frame IMU
+    RC_HIGH_RES                 = 6 # RC signal
+    IGNORE                      = 7 # Do not change axis
+    ANGLE_SHORTEST              = 8 # Shortest path to angle
+
+
+class ControlFlag(IntFlag):
+    """ High four bits that may be ORed with :class:ControlMode """
+
+    MIX_FOLLOW = 1 << 4
+    TARGET_PRECISE = 1 << 5
+    AUTO_TASK = 1 << 6
+    FORCE_RC_SPEED = 1 << 6
+    HIGH_RES_SPEED = 1 << 7
+
+
+class ControlConfigFlag(IntFlag):
+    """ Additional CMD_CONTROL_CONFIG rules, except confirmation selection. """
+
+    NO_CONFIRM = 1 << 0
+    SERVO_MODE_ENABLE = 1 << 1
+    SERVO_MODE_DISABLE = 1 << 2
+    LPF_EXTENDED_RANGE = 1 << 3
+
+
+@dataclass(frozen=True, slots=True)
+class ControlAxisConfig:
+    """ Filtering and motion-profile rules for one CMD_CONTROL axis. """
+
+    angle_lpf: int = 0
+    speed_lpf: int = 0
+    rc_lpf: int = 0
+    acceleration_limit: int = 0
+    jerk_slope: int = 0
+
+
+@dataclass(frozen=True, slots=True)
+class ControlConfig:
+    """ Rules used by CMD_CONTROL_CONFIG for roll, pitch, and yaw. """
+
+    timeout_ms: int = 0
+    channel_priorities: tuple[int, int, int, int, int] = (0, 0, 0, 0, 0)
+    axes: tuple[ControlAxisConfig, ControlAxisConfig, ControlAxisConfig] = (
+        ControlAxisConfig(),
+        ControlAxisConfig(),
+        ControlAxisConfig(),
+    )
+    rc_expo_rate: int = 0
+    flags: int = ControlConfigFlag.NO_CONFIRM
+    euler_order: int = 0
+
+
+class ConfirmationStatus(IntEnum):
+    """ Status of a CMD_CONFIRM request """
+
+    NOT_RECEIVED = 0
+    RECEIVED = 1
+    ERROR = 2
+
+
+@dataclass(frozen=True, slots=True)
+class CommandConfirmation:
+    """ CMD_CONFIRM or CMD_ERROR received for a previously sent command """
+
+    command_id: int
+    status: ConfirmationStatus
+    command_data: int
+    error_code: int
+    error_data: bytes
+
+
+@dataclass(frozen=True, slots=True)
+class AdjustableVariable:
+    """ One integer adjustable variable used by CMD_SET/GET_ADJ_VARS_VAL.
+
+    id is the firmware-specific adjustable-variable ID and value is
+    the raw signed 32-bit value used by the board. The command changes RAM only.
+    """
+
+    id: int
+    value: int
+
+
+@dataclass(frozen=True, slots=True)
+class ControlAxis:
+    """ One CMD_CONTROL axis using degrees and degrees per second.
+
+    angle is converted to the 16-bit SerialAPI angle representation and
+    speed to its standard speed representation by SimpleBGC.control.
+    For RC and RC_HIGH_RES modes, angle remains the raw RC value
+    required by the protocol rather than an angle in degrees.
+    """
+
+    mode: int = ControlMode.NO_CONTROL
+    speed: float = 0.0
+    angle: float = 0.0
+
+
 class RealtimeDataCustomFlag(IntFlag):
-    """Fields requested through CMD_REALTIME_DATA_CUSTOM."""
+    """ Fields requested through CMD_REALTIME_DATA_CUSTOM. """
 
     IMU_ANGLES = 1 << 0
     TARGET_ANGLES = 1 << 1
@@ -44,28 +151,27 @@ class RealtimeDataCustomFlag(IntFlag):
 
 @dataclass(frozen=True, slots=True)
 class RealtimeDataCustom:
-    """Result of a configurable CMD_REALTIME_DATA_CUSTOM request.
-
-    ``fields`` is indexed by :class:`RealtimeDataCustomFlag`. Composite fields
-    without a stable public Python structure are returned as raw ``bytes``.
-    """
+    """ Result of a configurable CMD_REALTIME_DATA_CUSTOM request. """
 
     flags: RealtimeDataCustomFlag
     timestamp_ms: int
     fields: Mapping[RealtimeDataCustomFlag, object]
     raw_payload: bytes
 
-# Values for roll, pitch, and yaw
+
 @dataclass(frozen=True, slots=True)
 class Axis3:
+    """ Values for roll, pitch, and yaw. """
+
     roll: float
     pitch: float
     yaw: float
 
 
-# CMD_GET_ANGLES result, in degrees and degrees per second.
 @dataclass(frozen=True, slots=True)
 class Angles:
+    """ CMD_GET_ANGLES result, in degrees and degrees per second. """
+
     imu: Axis3
     target: Axis3
     target_speed: Axis3
@@ -73,6 +179,7 @@ class Angles:
 
 @dataclass(frozen=True, slots=True)
 class AxisGAE:
+    """ CMD_GET_ANGLES_EXT result. """
 
     imu_angle: int
     target_angle: int
@@ -92,9 +199,11 @@ class AxisGAE:
         return self.frame_cam_angle
 
 
-# CMD_GET_ANGLES_EXT result, mirroring sbgcGetAnglesExt_t.
+
 @dataclass(frozen=True, slots=True)
 class AnglesExt:
+    """ CMD_GET_ANGLES_EXT result, mirroring sbgcGetAnglesExt_t. """
+
     axis_gae: tuple[AxisGAE, AxisGAE, AxisGAE]
 
     @property
@@ -114,9 +223,10 @@ class AnglesExt:
         return Axis3(*(axis.frame_cam_angle * (360.0 / 16384.0) for axis in self.axis_gae))
 
 
-# CMD_SCRIPT_DEBUG result.
 @dataclass(frozen=True, slots=True)
 class ScriptDebugInfo:
+    """ CMD_SCRIPT_DEBUG result. """
+
     current_command_counter: int
     error_code: int
 
@@ -131,15 +241,16 @@ class ScriptDebugInfo:
 
 @dataclass(frozen=True, slots=True)
 class AxisRealtimeData:
-    """One raw ``sbgcAxisRTD_t`` record."""
+    """ One raw sbgcAxisRTD_t record. """
 
     acc_data: int
     gyro_data: int
 
 
-# CMD_REALTIME_DATA and CMD_REALTIME_DATA_3 result (63 bytes).
 @dataclass(frozen=True, slots=True)
 class RealtimeData3:
+    """ CMD_REALTIME_DATA and CMD_REALTIME_DATA_3 result (63 bytes). """
+
     axis_rtd: tuple[AxisRealtimeData, AxisRealtimeData, AxisRealtimeData]
     serial_error_count: int
     system_error: int
@@ -164,9 +275,10 @@ class RealtimeData3:
     motor_power: tuple[int, int, int]
 
 
-# CMD_REALTIME_DATA_4 result (124 bytes).
 @dataclass(frozen=True, slots=True)
 class RealtimeData4(RealtimeData3):
+    """ CMD_REALTIME_DATA_4 result (124 bytes). """
+
     frame_cam_angle: tuple[int, int, int]
     reserved1: int
     balance_error: tuple[int, int, int]
@@ -184,9 +296,10 @@ class RealtimeData4(RealtimeData3):
     reserved2: bytes
 
 
-# CMD_BOARD_INFO and also comfortable view of board_version and firmware_version
 @dataclass(frozen=True, slots=True)
 class BoardInfo:
+    """ CMD_BOARD_INFO and also comfortable view of board_version and firmware_version. """
+
     board_ver: int
     firmware_ver: int
     state_flags: int
@@ -215,9 +328,10 @@ class BoardInfo:
         return f"{major}.{minor}"
 
 
-# CMD_BOARD_INFO_3
 @dataclass(frozen=True, slots=True)
 class BoardInfo3:
+    """ CMD_BOARD_INFO_3 extended meanings of board_info. """
+
     device_id: bytes
     mcu_id: bytes
     eeprom_size: int

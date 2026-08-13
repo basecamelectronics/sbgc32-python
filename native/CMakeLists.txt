@@ -16,6 +16,8 @@ add_library(sbgc_python SHARED
     "${SERIAL_API_DIR}/core/debug/debug.c"
     "${SERIAL_API_DIR}/core/highLayer/highLayer.c"
     "${SERIAL_API_DIR}/core/parser/parser.c"
+    "${SERIAL_API_DIR}/modules/gimbalControl/gimbalControl.c"
+    "${SERIAL_API_DIR}/modules/adjvar/adjvar.c"
     "${SERIAL_API_DIR}/modules/realtime/realtime.c"
     "${SERIAL_API_DIR}/modules/service/service.c"
 )

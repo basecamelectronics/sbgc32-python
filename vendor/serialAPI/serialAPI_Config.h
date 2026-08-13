@@ -64,7 +64,7 @@ extern		"C" {
  */
 /* Link various library functions,
    divided into modules */
-#define		SBGC_ADJVAR_MODULE		sbgcOFF			/*!<  Adjustable variables. See @ref Adjvar module									*/
+#define		SBGC_ADJVAR_MODULE		sbgcON			/*!<  Adjustable variables. See @ref Adjvar module									*/
 #define		SBGC_CALIB_MODULE		sbgcOFF			/*!<  Calibration functions. See @ref Calib module									*/
 #define		SBGC_EEPROM_MODULE		sbgcOFF			/*!<  EEPROM operations. See @ref EEPROM module										*/
 #define		SBGC_CONTROL_MODULE		sbgcON			/*!<  Gimbal control. See @ref Gimbal_Control module								*/
@@ -115,7 +115,7 @@ extern		"C" {
 #endif
 
 #define		SBGC_NEED_ASSERTS		sbgcOFF			/*!<  Allow commands assert															*/
-#define		SBGC_NEED_CONFIRM_CMD	sbgcOFF			/*!<  Service flag that responsible for CMD_CONFIRM commands handling				*/
+#define		SBGC_NEED_CONFIRM_CMD	sbgcON			/*!<  Service flag that responsible for CMD_CONFIRM commands handling				*/
 #define		SBGC_NEED_REF_INFO		sbgcOFF			/*!<  Debug mode flag for getting access to auxiliary info about system parameters	*/
 
 #define		SBGC_DEFAULT_TIMEOUT	1000				/*!<  Units: milliseconds. Default timeout for serial commands						*/
