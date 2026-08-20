@@ -1,8 +1,7 @@
-"""Compatibility imports for the native SimpleBGC bridge.
+"""ctypes ABI declarations shared by the native bridge.
 
-The implementation is private so applications keep importing this stable
-module while ABI declarations and DLL handling can
-evolve independently.
+The names are re-exported here so the ABI has one explicit import location for
+new code.  ``sbgc32.native`` remains the supported compatibility import.
 """
 
 from ._native_library import (
@@ -18,7 +17,6 @@ from ._native_library import (
     NativeControlAxisConfig,
     NativeControlConfig,
     NativeError,
-    NativeLibrary,
     NativeRealtimeData,
     NativeScriptDebugInfo,
     NativeStatus,

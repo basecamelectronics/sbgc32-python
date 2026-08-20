@@ -10,6 +10,18 @@ class MotorsOffMode(IntEnum):
     SAFE_STOP = 2
 
 
+class BeeperMode(IntFlag):
+    """ Standard CMD_BEEP_SOUND signals; CUSTOM_MELODY is a motor-sound melody. """
+
+    CALIBRATE = 1 << 0
+    CONFIRM = 1 << 1
+    ERROR = 1 << 2
+    CLICK = 1 << 4
+    COMPLETE = 1 << 5
+    INTRO = 1 << 6
+    CUSTOM_MELODY = 1 << 15
+
+
 class ControlMode(IntEnum):
     """ Low four bits of one CMD_CONTROL axis mode byte """
 
@@ -150,16 +162,6 @@ class RealtimeDataCustomFlag(IntFlag):
 
 
 @dataclass(frozen=True, slots=True)
-class RealtimeDataCustom:
-    """ Result of a configurable CMD_REALTIME_DATA_CUSTOM request. """
-
-    flags: RealtimeDataCustomFlag
-    timestamp_ms: int
-    fields: Mapping[RealtimeDataCustomFlag, object]
-    raw_payload: bytes
-
-
-@dataclass(frozen=True, slots=True)
 class Axis3:
     """ Values for roll, pitch, and yaw. """
 
@@ -170,7 +172,6 @@ class Axis3:
 
 @dataclass(frozen=True, slots=True)
 class Angles:
-    """ CMD_GET_ANGLES result, in degrees and degrees per second. """
 
     imu: Axis3
     target: Axis3
@@ -202,7 +203,6 @@ class AxisGAE:
 
 @dataclass(frozen=True, slots=True)
 class AnglesExt:
-    """ CMD_GET_ANGLES_EXT result, mirroring sbgcGetAnglesExt_t. """
 
     axis_gae: tuple[AxisGAE, AxisGAE, AxisGAE]
 
@@ -248,8 +248,16 @@ class AxisRealtimeData:
 
 
 @dataclass(frozen=True, slots=True)
+class RealtimeDataCustom:
+
+    flags: RealtimeDataCustomFlag
+    timestamp_ms: int
+    fields: Mapping[RealtimeDataCustomFlag, object]
+    raw_payload: bytes
+
+
+@dataclass(frozen=True, slots=True)
 class RealtimeData3:
-    """ CMD_REALTIME_DATA and CMD_REALTIME_DATA_3 result (63 bytes). """
 
     axis_rtd: tuple[AxisRealtimeData, AxisRealtimeData, AxisRealtimeData]
     serial_error_count: int
@@ -277,7 +285,6 @@ class RealtimeData3:
 
 @dataclass(frozen=True, slots=True)
 class RealtimeData4(RealtimeData3):
-    """ CMD_REALTIME_DATA_4 result (124 bytes). """
 
     frame_cam_angle: tuple[int, int, int]
     reserved1: int
@@ -298,7 +305,6 @@ class RealtimeData4(RealtimeData3):
 
 @dataclass(frozen=True, slots=True)
 class BoardInfo:
-    """ CMD_BOARD_INFO and also comfortable view of board_version and firmware_version. """
 
     board_ver: int
     firmware_ver: int
@@ -330,7 +336,7 @@ class BoardInfo:
 
 @dataclass(frozen=True, slots=True)
 class BoardInfo3:
-    """ CMD_BOARD_INFO_3 extended meanings of board_info. """
+    """Extended board information returned by CMD_BOARD_INFO_3. """
 
     device_id: bytes
     mcu_id: bytes

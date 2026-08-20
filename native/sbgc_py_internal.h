@@ -1,7 +1,9 @@
-#ifndef SBGC_PYTHON_H
-#define SBGC_PYTHON_H
+#ifndef SBGC_PY_INTERNAL_H
+#define SBGC_PY_INTERNAL_H
 
 #include <stdint.h>
+
+#include "sbgc32.h"
 
 #ifdef _WIN32
     #ifdef SBGC_PYTHON_EXPORTS
@@ -20,18 +22,6 @@ extern "C" {
 typedef struct sbgc_py_device sbgc_py_device_t;
 
 
-typedef uint8_t (*sbgc_py_tx_callback_t)(
-    void *context,
-    const uint8_t *data,
-    uint16_t size
-);
-
-
-typedef uint8_t (*sbgc_py_rx_callback_t)(void *context, uint8_t *data);
-typedef uint16_t (*sbgc_py_available_callback_t)(void *context);
-typedef uint32_t (*sbgc_py_time_callback_t)(void *context);
-
-
 typedef enum
 {
 
@@ -41,10 +31,7 @@ typedef enum
     SBGC_PY_NOT_CONNECTED       = -3,
     SBGC_PY_OPEN_FAILED         = -4,
     SBGC_PY_COMMUNICATION_ERROR = -5,
-    /* The SerialAPI module required by the requested command is disabled
-       in serialAPI_Config.h. */
     SBGC_PY_MODULE_DISABLED     = -6,
-    /* CMD_CONFIRM handling was requested but SBGC_NEED_CONFIRM_CMD is off. */
     SBGC_PY_CONFIRMATION_DISABLED = -7
 
 }   sbgc_py_status_t;
@@ -96,9 +83,10 @@ typedef struct
 }   sbgc_py_script_debug_info_t;
 
 
+/* A portable snapshot of sbgcConfirm_t after CMD_CONFIRM or CMD_ERROR. */
 typedef struct
 {
-    /* A portable snapshot of sbgcConfirm_t after CMD_CONFIRM or CMD_ERROR. */
+
     uint8_t                     command_id;
     uint8_t                     status;
     uint16_t                    command_data;
@@ -117,9 +105,6 @@ typedef struct
 }   sbgc_py_adjustable_variable_t;
 
 
-/* Mirrors sbgcAxisCCtrl_t / sbgcControlConfig_t without SerialAPI-private
-   field names. All zero values retain the board defaults for the corresponding
-   optional control settings. */
 typedef struct
 {
     uint8_t                     angle_lpf;
@@ -218,46 +203,38 @@ typedef struct
 
 typedef struct
 {
-    uint8_t device_id[9];
-    uint8_t mcu_id[12];
-    uint32_t eeprom_size;
+    uint8_t                     device_id [9];
+    uint8_t                     mcu_id [12];
+    uint32_t                    eeprom_size;
 
-    uint16_t script_slot_1_size;
-    uint16_t script_slot_2_size;
-    uint16_t script_slot_3_size;
-    uint16_t script_slot_4_size;
-    uint16_t script_slot_5_size;
+    uint16_t                    script_slot_1_size;
+    uint16_t                    script_slot_2_size;
+    uint16_t                    script_slot_3_size;
+    uint16_t                    script_slot_4_size;
+    uint16_t                    script_slot_5_size;
 
-    uint8_t profile_set_slots;
-    uint8_t profile_set_current;
-    uint8_t flash_size;
-    uint8_t imu_calib_info[2];
+    uint8_t                     profile_set_slots;
+    uint8_t                     profile_set_current;
+    uint8_t                     flash_size;
+    uint8_t                     imu_calib_info[2];
 
-    uint16_t script_slot_6_size;
-    uint16_t script_slot_7_size;
-    uint16_t script_slot_8_size;
-    uint16_t script_slot_9_size;
-    uint16_t script_slot_10_size;
+    uint16_t                    script_slot_6_size;
+    uint16_t                    script_slot_7_size;
+    uint16_t                    script_slot_8_size;
+    uint16_t                    script_slot_9_size;
+    uint16_t                    script_slot_10_size;
 
-    uint16_t hardware_flags;
-    uint32_t board_features_ext2;
-    uint8_t can_driver_main_limit;
-    uint8_t can_driver_aux_limit;
-    uint8_t adjustable_variables_total;
+    uint16_t                    hardware_flags;
+    uint32_t                    board_features_ext2;
+    uint8_t                     can_driver_main_limit;
+    uint8_t                     can_driver_aux_limit;
+    uint8_t                     adjustable_variables_total;
 
-} sbgc_py_board_info_3_t;
+}   sbgc_py_board_info_3_t;
 
 
-SBGC_PY_API sbgc_py_device_t *sbgc_py_open(
-    void *context,
-    sbgc_py_tx_callback_t transmit,
-    sbgc_py_rx_callback_t receive_byte,
-    sbgc_py_available_callback_t available_bytes,
-    sbgc_py_time_callback_t get_time_ms
-);
-
-/* Optional Windows-only native COM transport. The Python package uses pyserial callbacks. */
 SBGC_PY_API sbgc_py_device_t *sbgc_py_open_com (const char *port, uint32_t baudrate);
+
 
 SBGC_PY_API void sbgc_py_close (sbgc_py_device_t *device);
 
@@ -267,17 +244,32 @@ SBGC_PY_API sbgc_py_status_t sbgc_py_recover (sbgc_py_device_t *device);
 /* functions that call SBGC32 function */
 SBGC_PY_API sbgc_py_status_t sbgc_py_get_angles (sbgc_py_device_t *device, sbgc_py_angles_t *angles);
 SBGC_PY_API sbgc_py_status_t sbgc_py_get_angles_ext (sbgc_py_device_t *device, sbgc_py_angles_ext_t *angles);
+
 SBGC_PY_API sbgc_py_status_t sbgc_py_get_board_info (sbgc_py_device_t *device, sbgc_py_board_info_t *board_info);
 SBGC_PY_API sbgc_py_status_t sbgc_py_get_board_info_3 (sbgc_py_device_t *device, sbgc_py_board_info_3_t *board_info);
-/* Send CMD_RESET, then optionally wait for its CMD_RESET notification. */
+
 SBGC_PY_API sbgc_py_status_t sbgc_py_reset (sbgc_py_device_t *device, uint8_t flags, uint16_t delay_ms);
 SBGC_PY_API sbgc_py_status_t sbgc_py_expect_reset (sbgc_py_device_t *device);
-/* Switch motors on, or switch them off using sbgcMotorsMode_t (0..2).
-   The bridge deliberately uses SBGC_NO_CONFIRM: these functions report
-   successful transmission, not the board's asynchronous CMD_CONFIRM packet. */
+
 SBGC_PY_API sbgc_py_status_t sbgc_py_motors_on (sbgc_py_device_t *device);
 SBGC_PY_API sbgc_py_status_t sbgc_py_motors_off (sbgc_py_device_t *device, uint8_t mode);
-/* Send the 15-byte CMD_CONTROL payload. No confirmation is expected here. */
+
+SBGC_PY_API sbgc_py_status_t sbgc_py_play_beeper (
+    sbgc_py_device_t *device,
+    uint16_t mode,
+    uint8_t note_length,
+    uint8_t decay_factor,
+    const uint16_t *notes_hz,
+    uint8_t notes_count
+);
+
+SBGC_PY_API sbgc_py_status_t sbgc_py_execute_menu (
+    sbgc_py_device_t *device,
+    uint8_t menu_command,
+    uint8_t need_confirmation,
+    sbgc_py_confirmation_t *confirmation
+);
+
 SBGC_PY_API sbgc_py_status_t sbgc_py_control (
     sbgc_py_device_t *device,
     const uint8_t modes[3],
@@ -292,7 +284,8 @@ SBGC_PY_API sbgc_py_status_t sbgc_py_control_config (
     uint8_t need_confirmation,
     sbgc_py_confirmation_t *confirmation
 );
-/* ``variables`` and ``result`` must have ``count`` entries; count is 1..40. */
+
+
 SBGC_PY_API sbgc_py_status_t sbgc_py_get_adj_vars (
     sbgc_py_device_t *device,
     const uint8_t *ids,
@@ -306,8 +299,6 @@ SBGC_PY_API sbgc_py_status_t sbgc_py_set_adj_vars (
     uint8_t need_confirmation,
     sbgc_py_confirmation_t *confirmation
 );
-/* CMD_SAVE_PARAMS_3. ``count`` is 1..102 for selected IDs; zero saves all
-   active adjustable variables. */
 SBGC_PY_API sbgc_py_status_t sbgc_py_save_adj_vars (
     sbgc_py_device_t *device,
     const uint8_t *ids,
@@ -315,26 +306,49 @@ SBGC_PY_API sbgc_py_status_t sbgc_py_save_adj_vars (
     uint8_t need_confirmation,
     sbgc_py_confirmation_t *confirmation
 );
+
 SBGC_PY_API sbgc_py_status_t sbgc_py_run_script (sbgc_py_device_t *device, uint8_t mode, uint8_t slot);
 SBGC_PY_API sbgc_py_status_t sbgc_py_read_script_debug_info (
     sbgc_py_device_t *device, sbgc_py_script_debug_info_t *script_debug_info
 );
+
 SBGC_PY_API sbgc_py_status_t sbgc_py_get_realtime_data_3 (
     sbgc_py_device_t *device, sbgc_py_realtime_data_t *realtime_data
 );
 SBGC_PY_API sbgc_py_status_t sbgc_py_get_realtime_data_4 (
     sbgc_py_device_t *device, sbgc_py_realtime_data_t *realtime_data
 );
-/* ``result`` must provide at least ``payload_size + 4`` bytes. The bridge
-   stores the request flags in result[0..3]; SerialAPI writes the received
-   CMD_REALTIME_DATA_CUSTOM payload at result + 4. */
+
 SBGC_PY_API sbgc_py_status_t sbgc_py_get_realtime_data_custom (
     sbgc_py_device_t *device, uint32_t flags, uint8_t *result, uint8_t payload_size
 );
 
-/* Diagnostic snapshots of the most recent command exchange. */
 SBGC_PY_API uint16_t sbgc_py_copy_last_tx (sbgc_py_device_t *device, uint8_t *buffer, uint16_t capacity);
 SBGC_PY_API uint16_t sbgc_py_copy_last_rx (sbgc_py_device_t *device, uint8_t *buffer, uint16_t capacity);
+SBGC_PY_API uint16_t sbgc_py_copy_transport_diagnostics (
+    sbgc_py_device_t *device, char *buffer, uint16_t capacity
+);
+
+/* Internal state shared by the command modules. */
+struct sbgc_py_device
+{
+    void *context;
+    sbgcGeneral_t serial_api;
+    void (*close_context)(void *context);
+    void (*recover_context)(void *context);
+    uint8_t last_tx[64];
+    uint16_t last_tx_size;
+    uint8_t last_rx[256];
+    uint16_t last_rx_size;
+    uint32_t available_calls;
+    uint32_t receive_calls;
+    uint32_t receive_empty;
+    uint32_t wait_calls;
+    uint16_t last_available;
+    int connected;
+};
+
+extern sbgc_py_device_t *current_device;
 
 #ifdef __cplusplus
 }

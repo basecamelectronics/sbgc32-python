@@ -4,6 +4,7 @@
 /.venv/
 /.venv-new/
 /src/sbgc32.egg-info/
+/src/sbgc32/_native/Release/
 
 # IDE project settings
 /.idea/

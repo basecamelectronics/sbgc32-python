@@ -1,9 +1,10 @@
-from .commands import Command, ResponseCommand
+from .commands import Command, MenuCommands, ResponseCommand
 from .device import SimpleBGC
 from .types import (
     Angles,
     AnglesExt,
     AdjustableVariable,
+    BeeperMode,
     Axis3,
     AxisGAE,
     AxisRealtimeData,
@@ -30,6 +31,7 @@ __all__ = [
     "Angles",
     "AnglesExt",
     "AdjustableVariable",
+    "BeeperMode",
     "Axis3",
     "AxisGAE",
     "AxisRealtimeData",
@@ -45,6 +47,7 @@ __all__ = [
     "ControlFlag",
     "ControlMode",
     "MotorsOffMode",
+    "MenuCommands",
     "RealtimeDataCustom",
     "RealtimeDataCustomFlag",
     "RealtimeData3",

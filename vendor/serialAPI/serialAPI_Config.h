@@ -65,11 +65,11 @@ extern		"C" {
 /* Link various library functions,
    divided into modules */
 #define		SBGC_ADJVAR_MODULE		sbgcON			/*!<  Adjustable variables. See @ref Adjvar module									*/
-#define		SBGC_CALIB_MODULE		sbgcOFF			/*!<  Calibration functions. See @ref Calib module									*/
-#define		SBGC_EEPROM_MODULE		sbgcOFF			/*!<  EEPROM operations. See @ref EEPROM module										*/
+#define		SBGC_CALIB_MODULE		sbgcON			/*!<  Calibration functions. See @ref Calib module									*/
+#define		SBGC_EEPROM_MODULE		sbgcON			/*!<  EEPROM operations. See @ref EEPROM module										*/
 #define		SBGC_CONTROL_MODULE		sbgcON			/*!<  Gimbal control. See @ref Gimbal_Control module								*/
-#define		SBGC_IMU_MODULE			sbgcOFF			/*!<  IMU data functions. See @ref IMU module										*/
-#define		SBGC_PROFILES_MODULE	sbgcOFF			/*!<  Profile configurations. See @ref Profiles module								*/
+#define		SBGC_IMU_MODULE			sbgcON			/*!<  IMU data functions. See @ref IMU module										*/
+#define		SBGC_PROFILES_MODULE	sbgcON			/*!<  Profile configurations. See @ref Profiles module								*/
 #define		SBGC_REALTIME_MODULE	sbgcON			/*!<  Realtime data processing. See @ref Realtime module							*/
 #define		SBGC_SERVICE_MODULE		sbgcON			/*!<  Service functions. See @ref Service module									*/
 

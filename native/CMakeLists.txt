@@ -9,7 +9,12 @@ set(CMAKE_C_EXTENSIONS OFF)
 set(SERIAL_API_DIR "${CMAKE_CURRENT_SOURCE_DIR}/../vendor/serialAPI")
 
 add_library(sbgc_python SHARED
-    sbgc_python.c
+    sbgc_py_common.c
+    sbgc_py_transport.c
+    sbgc_py_control.c
+    sbgc_py_adjvars.c
+    sbgc_py_realtime.c
+    sbgc_py_service.c
     "${SERIAL_API_DIR}/sbgc32.c"
     "${SERIAL_API_DIR}/core/commandBuild.c"
     "${SERIAL_API_DIR}/core/lowLayer.c"
