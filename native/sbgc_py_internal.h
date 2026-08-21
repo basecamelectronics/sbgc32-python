@@ -21,6 +21,11 @@ extern "C" {
 
 typedef struct sbgc_py_device sbgc_py_device_t;
 
+typedef uint8_t (*sbgc_py_tx_callback_t)(void *context, const uint8_t *data, uint16_t size);
+typedef uint8_t (*sbgc_py_rx_callback_t)(void *context, uint8_t *data);
+typedef uint16_t (*sbgc_py_available_callback_t)(void *context);
+typedef uint32_t (*sbgc_py_time_callback_t)(void *context);
+
 
 typedef enum
 {
@@ -323,28 +328,25 @@ SBGC_PY_API sbgc_py_status_t sbgc_py_get_realtime_data_custom (
     sbgc_py_device_t *device, uint32_t flags, uint8_t *result, uint8_t payload_size
 );
 
-SBGC_PY_API uint16_t sbgc_py_copy_last_tx (sbgc_py_device_t *device, uint8_t *buffer, uint16_t capacity);
-SBGC_PY_API uint16_t sbgc_py_copy_last_rx (sbgc_py_device_t *device, uint8_t *buffer, uint16_t capacity);
-SBGC_PY_API uint16_t sbgc_py_copy_transport_diagnostics (
-    sbgc_py_device_t *device, char *buffer, uint16_t capacity
+SBGC_PY_API sbgc_py_device_t *sbgc_py_open (
+    void *context,
+    sbgc_py_tx_callback_t transmit,
+    sbgc_py_rx_callback_t receive_byte,
+    sbgc_py_available_callback_t available_bytes,
+    sbgc_py_time_callback_t get_time_ms
 );
 
 /* Internal state shared by the command modules. */
 struct sbgc_py_device
 {
     void *context;
+    sbgc_py_tx_callback_t transmit;
+    sbgc_py_rx_callback_t receive_byte;
+    sbgc_py_available_callback_t available_bytes;
+    sbgc_py_time_callback_t get_time_ms;
     sbgcGeneral_t serial_api;
     void (*close_context)(void *context);
     void (*recover_context)(void *context);
-    uint8_t last_tx[64];
-    uint16_t last_tx_size;
-    uint8_t last_rx[256];
-    uint16_t last_rx_size;
-    uint32_t available_calls;
-    uint32_t receive_calls;
-    uint32_t receive_empty;
-    uint32_t wait_calls;
-    uint16_t last_available;
     int connected;
 };
 

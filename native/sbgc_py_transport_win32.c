@@ -38,7 +38,6 @@ void SerialAPI_CommandWaitingHandler (sbgcGeneral_t *gSBGC)
 #ifdef _WIN32
     if (current_device != NULL)
     {
-        current_device->wait_calls++;
         sbgc_native_com_wait_for_data();
         if (gSBGC != NULL && gSBGC->_ll->drvAvailableBytes(gSBGC->_ll->drv) != 0)
             gSBGC->_ll->rx(gSBGC);
@@ -77,14 +76,6 @@ typedef struct
     uint16_t rx_size;
     int rx_overflow;
     int lock_initialized;
-    volatile LONG reader_stage;
-    volatile LONG last_error;
-    volatile LONG last_events;
-    volatile LONG last_queue;
-    volatile LONG last_read;
-    ULONGLONG last_tx_tick;
-    ULONGLONG last_rx_tick;
-
 }   sbgc_py_com_t;
 
 static sbgc_py_com_t *current_com;
@@ -93,31 +84,34 @@ static sbgc_py_com_t *current_com;
 static void sbgc_native_com_wait_for_data (void)
 {
     if (current_com != NULL && current_com->rx_ready_event != NULL)
-        WaitForSingleObject(current_com->rx_ready_event, 0);
+        WaitForSingleObject(current_com->rx_ready_event, INFINITE);
 }
 
 
 static void sbgc_native_com_append (sbgc_py_com_t *com, const uint8_t *data, DWORD size)
 {
-    uint16_t index;
-    uint16_t item;
-
+    uint16_t index, item;
     EnterCriticalSection(&com->rx_lock);
+
     if (size > (sizeof(com->rx_buffer) - com->rx_size))
     {
         com->rx_overflow = 1;
     }
+
     else
     {
         index = (uint16_t)((com->rx_start + com->rx_size) % sizeof(com->rx_buffer));
+
         for (item = 0; item < size; item++)
         {
             com->rx_buffer[index] = data[item];
             index = (uint16_t)((index + 1) % sizeof(com->rx_buffer));
         }
+
         com->rx_size = (uint16_t)(com->rx_size + size);
         SetEvent(com->rx_ready_event);
     }
+
     LeaveCriticalSection(&com->rx_lock);
 }
 
@@ -125,9 +119,11 @@ static void sbgc_native_com_append (sbgc_py_com_t *com, const uint8_t *data, DWO
 static DWORD WINAPI sbgc_native_com_reader (LPVOID parameter)
 {
     sbgc_py_com_t *com = (sbgc_py_com_t *)parameter;
-    OVERLAPPED wait_overlapped = { 0 };
-    OVERLAPPED read_overlapped = { 0 };
-    HANDLE waits[2];
+
+    OVERLAPPED  wait_overlapped = { 0 },
+                read_overlapped = { 0 };
+
+    HANDLE waits [2];
 
     wait_overlapped.hEvent = CreateEvent(NULL, TRUE, FALSE, NULL);
     read_overlapped.hEvent = CreateEvent(NULL, TRUE, FALSE, NULL);
@@ -135,28 +131,26 @@ static DWORD WINAPI sbgc_native_com_reader (LPVOID parameter)
     if (wait_overlapped.hEvent == NULL || read_overlapped.hEvent == NULL)
         goto done;
 
-    waits[0] = com->stop_event;
-    waits[1] = wait_overlapped.hEvent;
+    waits[0] = com->stop_event; // Signal of ending flow
+    waits[1] = wait_overlapped.hEvent; // Dsts arrival event
 
     while (WaitForSingleObject(com->stop_event, 0) != WAIT_OBJECT_0)
     {
-        DWORD events = 0;
-        DWORD errors = 0;
+        DWORD   events = 0,
+                errors = 0,
+                received = 0,
+                count = 0;
         COMSTAT status;
-        uint8_t temporary[256];
-        DWORD received = 0;
-        DWORD count;
+        uint8_t temporary [256];
 
-        InterlockedExchange(&com->reader_stage, 2); /* waiting for EV_RXCHAR */
         ResetEvent(wait_overlapped.hEvent);
 
+        /* Blocks the flow until data becomes available - event EV_RXCHAR */
         if (!WaitCommEvent(com->handle, &events, &wait_overlapped))
         {
             DWORD error = GetLastError();
             if (error != ERROR_IO_PENDING)
             {
-                InterlockedExchange(&com->reader_stage, 3);
-                InterlockedExchange(&com->last_error, error);
                 break;
             }
 
@@ -168,8 +162,6 @@ static DWORD WINAPI sbgc_native_com_reader (LPVOID parameter)
 
             if (!GetOverlappedResult(com->handle, &wait_overlapped, &received, FALSE))
             {
-                InterlockedExchange(&com->reader_stage, 4);
-                InterlockedExchange(&com->last_error, GetLastError());
                 continue;
             }
         }
@@ -177,73 +169,38 @@ static DWORD WINAPI sbgc_native_com_reader (LPVOID parameter)
         if (WaitForSingleObject(com->stop_event, 0) == WAIT_OBJECT_0)
             break;
 
-        InterlockedExchange(&com->last_events, events);
         if (!ClearCommError(com->handle, &errors, &status))
         {
-            InterlockedExchange(&com->reader_stage, 5);
-            InterlockedExchange(&com->last_error, GetLastError());
             break;
         }
 
+        /* Checking the amount of data in the buffer */
         count = status.cbInQue < sizeof(temporary) ? status.cbInQue : sizeof(temporary);
-        InterlockedExchange(&com->last_queue, count);
         if (count == 0)
             continue;
 
+        /* Reading 256 byte in temporary */
         ResetEvent(read_overlapped.hEvent);
         if (!ReadFile(com->handle, temporary, count, &received, &read_overlapped))
         {
-            if (GetLastError() != ERROR_IO_PENDING ||
-                !GetOverlappedResult(com->handle, &read_overlapped, &received, TRUE))
+            if (GetLastError() != ERROR_IO_PENDING || !GetOverlappedResult(com->handle, &read_overlapped, &received, TRUE))
             {
-                InterlockedExchange(&com->reader_stage, 6);
-                InterlockedExchange(&com->last_error, GetLastError());
                 break;
             }
         }
 
-    if (received != 0)
-    {
-        InterlockedExchange(&com->reader_stage, 7);
-        InterlockedExchange(&com->last_read, received);
-        com->last_rx_tick = GetTickCount64();
-        sbgc_native_com_append(com, temporary, received);
+        if (received != 0)
+        {
+            sbgc_native_com_append(com, temporary, received);
         }
     }
 
 done:
-    InterlockedExchange(&com->reader_stage, 8); /* stopped */
     if (wait_overlapped.hEvent != NULL) CloseHandle(wait_overlapped.hEvent);
     if (read_overlapped.hEvent != NULL) CloseHandle(read_overlapped.hEvent);
     return 0;
 }
 
-/*
-uint16_t sbgc_py_copy_transport_diagnostics (sbgc_py_device_t *device, char *buffer, uint16_t capacity)
-{
-    sbgc_py_com_t *com;
-    int size;
-
-    if (device == NULL || buffer == NULL || capacity == 0)
-        return 0;
-    com = (sbgc_py_com_t *)device->context;
-    if (com == NULL)
-        return 0;
-    size = snprintf(buffer, capacity,
-                    "stage=%ld error=%ld events=0x%lX queue=%ld read=%ld buffered=%u overflow=%d "
-                    "delay_ms=%llu avail=%lu/%u recv=%lu empty=%lu wait=%lu parser=%d status=%d",
-                    com->reader_stage, com->last_error, com->last_events, com->last_queue,
-                    com->last_read, com->rx_size, com->rx_overflow,
-                    com->last_rx_tick >= com->last_tx_tick
-                        ? (unsigned long long)(com->last_rx_tick - com->last_tx_tick) : 0,
-                    device->available_calls, device->last_available, device->receive_calls,
-                    device->receive_empty, device->wait_calls, device->serial_api._ll->parserState,
-                    device->serial_api._lastSerialCommandStatus);
-    if (size < 0)
-        return 0;
-    return (uint16_t)(size >= capacity ? capacity - 1 : size);
-}
-*/
 
 static int sbgc_native_com_start_reader (sbgc_py_com_t *com)
 {
@@ -278,9 +235,6 @@ static uint8_t sbgc_native_com_transmit (void *context, const uint8_t *data, uin
         if (GetOverlappedResult(com->handle, &write_overlapped, &written, TRUE))
             result = (written == size ? 0 : 1);
 
-    if (result == 0)
-        com->last_tx_tick = GetTickCount64();
-
     CloseHandle(write_overlapped.hEvent);
 
     return (uint8_t)result;
@@ -295,6 +249,7 @@ static uint8_t sbgc_native_com_receive_byte (void *context, uint8_t *data)
         return 1;
 
     EnterCriticalSection(&com->rx_lock);
+
     if (com->rx_size == 0)
     {
         ResetEvent(com->rx_ready_event);
@@ -431,19 +386,6 @@ SBGC_PY_API sbgc_py_device_t *sbgc_py_open_com (const char *port, uint32_t baudr
     settings.fBinary = TRUE;
     settings.fParity = FALSE;
 
-    /* Match pyserial defaults: 8N1 with no modem or XON/XOFF handshaking. */
-    settings.fDtrControl = DTR_CONTROL_DISABLE;
-    settings.fRtsControl = RTS_CONTROL_DISABLE;
-    settings.fOutxCtsFlow = FALSE;
-    settings.fOutxDsrFlow = FALSE;
-    settings.fOutX = FALSE;
-    settings.fInX = FALSE;
-    settings.fErrorChar = FALSE;
-    settings.fNull = FALSE;
-    settings.fAbortOnError = FALSE;
-    settings.XonChar = 0x11;
-    settings.XoffChar = 0x13;
-
     if (!SetCommState(com->handle, &settings))
     {
         sbgc_native_com_close(com);
@@ -501,16 +443,6 @@ static ui8 sbgc_native_transmit (void *driver, ui8 *data, ui16 size)
     if (device == NULL || !device->connected || sbgc_native_com_transmit(device->context, data, size) != 0)
         return SBGC_DRV_TX_BUFF_OVERFLOW_FLAG;
 
-    device->last_rx_size = 0;
-    device->available_calls = 0;
-    device->receive_calls = 0;
-    device->receive_empty = 0;
-    device->wait_calls = 0;
-    device->last_available = 0;
-    device->last_tx_size = size > sizeof(device->last_tx) ? sizeof(device->last_tx) : size;
-
-    memcpy(device->last_tx, data, device->last_tx_size);
-
     return SBGC_DRV_TX_OK_FLAG;
 }
 
@@ -519,19 +451,8 @@ static ui8 sbgc_native_receive_byte (void *driver, ui8 *data)
 {
     sbgc_py_device_t *device = (sbgc_py_device_t *)driver;
 
-    if (device != NULL)
-        device->receive_calls++;
-
     if (device == NULL || !device->connected || sbgc_native_com_receive_byte(device->context, data) != 0)
-    {
-        if (device != NULL)
-            device->receive_empty++;
-
         return SBGC_DRV_RX_BUFF_EMPTY_FLAG;
-    }
-
-    if (device->last_rx_size < sizeof(device->last_rx))
-        device->last_rx[device->last_rx_size++] = *data;
 
     return SBGC_DRV_RX_BUSY_FLAG;
 }
@@ -540,17 +461,10 @@ static ui8 sbgc_native_receive_byte (void *driver, ui8 *data)
 static ui16 sbgc_native_available_bytes (void *driver)
 {
     sbgc_py_device_t *device = (sbgc_py_device_t *)driver;
-    ui16 available;
-
     if (device == NULL || !device->connected)
         return SBGC_RX_BUFFER_OVERFLOW_FLAG;
 
-    available = sbgc_native_com_available_bytes(device->context);
-
-    device->available_calls++;
-    device->last_available = available;
-
-    return available;
+    return sbgc_native_com_available_bytes(device->context);
 }
 
 

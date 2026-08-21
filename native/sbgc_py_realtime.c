@@ -16,9 +16,6 @@ sbgc_py_status_t sbgc_py_get_angles (sbgc_py_device_t *device, sbgc_py_angles_t 
     if (current_device != device)
         return SBGC_PY_ERROR;
 
-    device->last_tx_size = 0;
-    device->last_rx_size = 0;
-
     status = SBGC32_GetAngles(&device->serial_api, &native_angles);
 
     if (status != sbgcCOMMAND_OK || device->serial_api._lastSerialCommandStatus != serialAPI_TX_RX_OK)
@@ -52,9 +49,6 @@ SBGC_PY_API sbgc_py_status_t sbgc_py_get_angles_ext (sbgc_py_device_t *device, s
         return SBGC_PY_NOT_CONNECTED;
     if (current_device != device)
         return SBGC_PY_ERROR;
-
-    device->last_tx_size = 0;
-    device->last_rx_size = 0;
 
     status = SBGC32_GetAnglesExt(&device->serial_api, &native_angles_ext);
 
@@ -92,9 +86,6 @@ static sbgc_py_status_t sbgc_py_get_realtime_data (sbgc_py_device_t *device, sbg
         return SBGC_PY_NOT_CONNECTED;
     if (current_device != device)
         return SBGC_PY_ERROR;
-
-    device->last_tx_size = 0;
-    device->last_rx_size = 0;
 
     status = extended
         ? SBGC32_ReadRealTimeData4(&device->serial_api, &native_realtime_data)
@@ -142,8 +133,6 @@ sbgc_py_status_t sbgc_py_get_realtime_data_custom (sbgc_py_device_t *device, uin
     memset(result, 0, (size_t)payload_size + 4);
     memcpy(result, &flags, sizeof(flags));
 
-    device->last_tx_size = 0;
-    device->last_rx_size = 0;
     status = SBGC32_RequestRealTimeDataCustom(&device->serial_api, result, payload_size);
 
     if (status != sbgcCOMMAND_OK || device->serial_api._lastSerialCommandStatus != serialAPI_TX_RX_OK)

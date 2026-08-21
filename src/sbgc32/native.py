@@ -5,7 +5,7 @@ module while ABI declarations and DLL handling can
 evolve independently.
 """
 
-from ._native_library import (
+from ._serial_api_library import (
     NativeAdjustableVariable,
     NativeAngles,
     NativeAnglesExt,

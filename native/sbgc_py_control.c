@@ -33,8 +33,6 @@ sbgc_py_status_t sbgc_py_control (
         native_control.AxisC[axis].angle = angles[axis];
     }
 
-    device->last_tx_size = 0;
-    device->last_rx_size = 0;
     status = SBGC32_Control(&device->serial_api, &native_control);
 
     if (status != sbgcCOMMAND_OK || device->serial_api._lastSerialCommandStatus != serialAPI_TX_RX_OK)
@@ -127,9 +125,6 @@ sbgc_py_status_t sbgc_py_control_config (
     native_config.RC_ExpoRate = config->rc_expo_rate;
     native_config.flags = config->flags;
     native_config.EulerOrder = config->euler_order;
-
-    device->last_tx_size = 0;
-    device->last_rx_size = 0;
 
 #if (SBGC_NEED_CONFIRM_CMD)
     if (need_confirmation)

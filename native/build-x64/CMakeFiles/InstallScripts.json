@@ -1,0 +1,7 @@
+{
+	"InstallScripts" : 
+	[
+		"C:/Basecam/python_serialAPI/native/build-x64/cmake_install.cmake"
+	],
+	"Parallel" : false
+}

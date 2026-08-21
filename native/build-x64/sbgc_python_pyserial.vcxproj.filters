@@ -1,0 +1,58 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Project ToolsVersion="18.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ItemGroup>
+    <ClCompile Include="C:\Basecam\python_serialAPI\native\sbgc_py_transport_pyserial.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Basecam\python_serialAPI\native\sbgc_py_control.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Basecam\python_serialAPI\native\sbgc_py_adjvars.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Basecam\python_serialAPI\native\sbgc_py_realtime.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Basecam\python_serialAPI\native\sbgc_py_service.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Basecam\python_serialAPI\vendor\serialAPI\sbgc32.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Basecam\python_serialAPI\vendor\serialAPI\core\commandBuild.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Basecam\python_serialAPI\vendor\serialAPI\core\lowLayer.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Basecam\python_serialAPI\vendor\serialAPI\core\debug\debug.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Basecam\python_serialAPI\vendor\serialAPI\core\highLayer\highLayer.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Basecam\python_serialAPI\vendor\serialAPI\core\parser\parser.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Basecam\python_serialAPI\vendor\serialAPI\modules\gimbalControl\gimbalControl.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Basecam\python_serialAPI\vendor\serialAPI\modules\adjvar\adjvar.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Basecam\python_serialAPI\vendor\serialAPI\modules\realtime\realtime.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Basecam\python_serialAPI\vendor\serialAPI\modules\service\service.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+  </ItemGroup>
+  <ItemGroup>
+    <CustomBuild Include="C:\Basecam\python_serialAPI\native\CMakeLists.txt" />
+  </ItemGroup>
+  <ItemGroup>
+    <Filter Include="Source Files">
+      <UniqueIdentifier>{EBB8DC8D-81BA-32F5-8432-05999E876BCA}</UniqueIdentifier>
+    </Filter>
+  </ItemGroup>
+</Project>

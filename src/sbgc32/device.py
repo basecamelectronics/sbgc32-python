@@ -1,11 +1,10 @@
-""" Public SimpleBGC facade and generic command dispatcher. """
-
 from __future__ import annotations
 
 from time import sleep
 
 from . import _adjvars, _control, _realtime, _service
-from ._native_library import NativeError, NativeLibrary
+from ._serial_api_library import NativeError
+from .backends import create_backend
 from .commands import Command, MenuCommands, ResponseCommand
 from .types import (
     AdjustableVariable,
@@ -32,26 +31,31 @@ class SimpleBGC:
     def __init__(
         self,
         port: str,
-        baudrate: int = 115200,
+        baud_rate: int = 115200,
         startup_delay: float = 1.0,
+        backend: str = "pyserial",
     ) -> None:
-        """ @brief  Opens a SerialAPI connection to a SimpleBGC controller.
+        """\
+            @brief  Opens a SerialAPI connection to a SimpleBGC controller.
 
             @param  port              - system serial port name, for example "COM4".
-                    baudrate          - serial port speed in bits per second.
+                    baud rate          - serial port speed in bits per second.
                     startup_delay     - delay after opening the port, in seconds.
+                    backend           - transport implementation to use. native_win or pyserial.
         """
         if startup_delay < 0:
             raise ValueError("startup_delay must be non-negative")
-        self._native = NativeLibrary()
-        # The Windows-native build owns the COM handle.
-        self._device = self._native.open_native(port, baudrate)
+        self._backend = create_backend(backend)
+        self._native = self._backend.library
+        self._device = self._backend.open(port, baud_rate)
         sleep(startup_delay)
         self._closed = False
         self._debug_script_slot: int | None = None
 
     def execute(self, command: Command | int, **kwargs) -> object:
-        """ @brief  Executes a supported SerialAPI command through this facade. """
+        """\
+            @brief  Executes a supported SerialAPI command through this facade.
+        """
         if isinstance(command, ResponseCommand):
             raise ValueError(f"{command.name} is sent by the board and cannot be executed.")
         command = Command(command)
@@ -161,7 +165,7 @@ class SimpleBGC:
                     config = CC(
                         timeout_ms=1_000,
                         channel_priorities=(0, 0, 0, 0, 100),
-                        axes=(CAC(), CAC(), CAC(angle_lpf=2, speed_lpf=2, acceleration_limit=90, jerk_slope=5)),
+                        axes=(CAC(), CAC(), CAC(angle_lpf=2, speed_lpf=2, acceleration_limit=90, jerk_slope=5))
                     )
 
                     SimpleBGC.configure_control(config, confirm_control=False)
@@ -286,7 +290,7 @@ class SimpleBGC:
     def get_realtime_data(self) -> RealtimeData3:
         """ @brief The old name of REALTIME_DATA_3. Receives real-time data.
 
-            @code  data = SimpleBGC.get_realtime_data()
+            @code   data = SimpleBGC.get_realtime_data()
 
                     print(f"Battery: {data.bat_level / 100:.2f} V")
                     print(f"System error mask: 0x{data.system_error:04X}")
@@ -481,7 +485,7 @@ class SimpleBGC:
     def close(self) -> None:
         """ @brief  Closes the serial connection and releases its resources. """
         if not self._closed:
-            self._native.close(self._device)
+            self._backend.close(self._device)
             self._closed = True
             self._debug_script_slot = None
 

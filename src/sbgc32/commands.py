@@ -10,6 +10,7 @@ class Command(IntEnum):
 
     # Real-time state monitoring and diagnostics
     CMD_REALTIME_DATA_CUSTOM    = 88    # Request configurable realtime data
+    CMD_REALTIME_DATA           = 22    # Request real-time data
     CMD_REALTIME_DATA_3         = 23    # Request real-time data
     CMD_REALTIME_DATA_4         = 25    # Receive extended version of real-time data
     CMD_GET_ANGLES              = 73    # Request information related to IMU angles and RC control state

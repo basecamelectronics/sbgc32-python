@@ -15,9 +15,6 @@ sbgc_py_status_t sbgc_py_get_board_info (sbgc_py_device_t *device, sbgc_py_board
     if (current_device != device)
         return SBGC_PY_ERROR;
 
-    device->last_tx_size = 0;
-    device->last_rx_size = 0;
-
     status = SBGC32_ReadBoardInfo(&device->serial_api, &native_board_info, 0);
 
     if (status != sbgcCOMMAND_OK || device->serial_api._lastSerialCommandStatus != serialAPI_TX_RX_OK ||
@@ -56,9 +53,6 @@ sbgc_py_status_t sbgc_py_get_board_info_3 (sbgc_py_device_t *device, sbgc_py_boa
         return SBGC_PY_NOT_CONNECTED;
     if (current_device != device)
         return SBGC_PY_ERROR;
-
-    device->last_tx_size = 0;
-    device->last_rx_size = 0;
 
     status = SBGC32_ReadBoardInfo3(&device->serial_api, &native_board_info);
 
@@ -115,8 +109,6 @@ sbgc_py_status_t sbgc_py_reset (sbgc_py_device_t *device, uint8_t flags, uint16_
     if (current_device != device)
         return SBGC_PY_ERROR;
 
-    device->last_tx_size = 0;
-    device->last_rx_size = 0;
     status = SBGC32_Reset(&device->serial_api, flags, delay_ms);
     if (status != sbgcCOMMAND_OK ||
         device->serial_api._lastSerialCommandStatus != serialAPI_TX_RX_OK)
@@ -169,8 +161,6 @@ sbgc_py_status_t sbgc_py_motors_on (sbgc_py_device_t *device)
     if (current_device != device)
         return SBGC_PY_ERROR;
 
-    device->last_tx_size = 0;
-    device->last_rx_size = 0;
     status = SBGC32_SetMotorsON(&device->serial_api, SBGC_NO_CONFIRM);
     if (status != sbgcCOMMAND_OK ||
         device->serial_api._lastSerialCommandStatus != serialAPI_TX_RX_OK)
@@ -197,9 +187,6 @@ sbgc_py_status_t sbgc_py_motors_off (sbgc_py_device_t *device, uint8_t mode)
         return SBGC_PY_ERROR;
     if (mode > MOTOR_MODE_SAFE_STOP)
         return SBGC_PY_INVALID_ARGUMENT;
-
-    device->last_tx_size = 0;
-    device->last_rx_size = 0;
 
     status = SBGC32_SetMotorsOFF(&device->serial_api, (sbgcMotorsMode_t)mode, SBGC_NO_CONFIRM);
 
@@ -246,8 +233,6 @@ sbgc_py_status_t sbgc_py_play_beeper (
     settings.notesFreqHz = (ui16 *)notes_hz;
     settings.notesQuan = notes_count;
 
-    device->last_tx_size = 0;
-    device->last_rx_size = 0;
     status = SBGC32_PlayBeeper(&device->serial_api, &settings);
 
     if (status != sbgcCOMMAND_OK || device->serial_api._lastSerialCommandStatus != serialAPI_TX_RX_OK)
@@ -285,8 +270,6 @@ sbgc_py_status_t sbgc_py_execute_menu (
     if (need_confirmation && confirmation == NULL)
         return SBGC_PY_INVALID_ARGUMENT;
 
-    device->last_tx_size = 0;
-    device->last_rx_size = 0;
 #if (SBGC_NEED_CONFIRM_CMD)
     if (need_confirmation)
     {
@@ -345,9 +328,6 @@ sbgc_py_status_t sbgc_py_run_script (sbgc_py_device_t *device, uint8_t mode, uin
 
     if (mode > ScrtM_START_WITH_DEBUG || slot > 10)
         return SBGC_PY_INVALID_ARGUMENT;
-
-    device->last_tx_size = 0;
-    device->last_rx_size = 0;
 
     status = SBGC32_RunScript(&device->serial_api, (sbgcScriptMode_t)mode, (sbgcScriptSlotNum_t)slot);
 

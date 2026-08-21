@@ -4,7 +4,7 @@ The names are re-exported here so the ABI has one explicit import location for
 new code.  ``sbgc32.native`` remains the supported compatibility import.
 """
 
-from ._native_library import (
+from ._serial_api_library import (
     NativeAdjustableVariable,
     NativeAngles,
     NativeAnglesExt,

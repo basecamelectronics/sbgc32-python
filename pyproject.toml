@@ -2,18 +2,4 @@
 requires = ["setuptools>=68", "wheel"]
 build-backend = "setuptools.build_meta"
 
-[project]
-name = "sbgc32"
-version = "0.2.0"
-description = "Python bindings for the SimpleBGC32 Serial API"
-requires-python = ">=3.10"
-dependencies = []
-
-[tool.setuptools]
-package-dir = {"" = "src"}
-
-[tool.setuptools.packages.find]
-where = ["src"]
-
-[tool.setuptools.package-data]
-sbgc32 = ["_native/*.dll"]
+# Metadata and package contents are selected by setup.py from SBGC32_WHEEL_BACKEND: native_c or pyserial.

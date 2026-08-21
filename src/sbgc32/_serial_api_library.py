@@ -206,19 +206,24 @@ class NativeBoardInfo3(ctypes.Structure):
     ]
 
 
-def _library_name() -> str:
+def _library_name(stem: str = "sbgc_python") -> str:
     if sys.platform == "win32":
-        return "sbgc_python.dll"
+        return f"{stem}.dll"
     if sys.platform == "darwin":
-        return "libsbgc_python.dylib"
-    return "libsbgc_python.so"
+        return f"lib{stem}.dylib"
+    return f"lib{stem}.so"
 
 
-class NativeLibrary:
+class SerialApiLibrary:
 
-    def __init__(self, library_path: str | Path | None = None) -> None:
+    def __init__(
+        self,
+        library_path: str | Path | None = None,
+        *,
+        library_stem: str = "sbgc_python",
+    ) -> None:
         if library_path is None:
-            library_path = Path(__file__).parent / "_native" / _library_name()
+            library_path = Path(__file__).parent / "_native" / _library_name(library_stem)
 
         try:
             self._library = ctypes.CDLL(str(library_path))
@@ -232,8 +237,6 @@ class NativeLibrary:
 
     def _configure_functions(self) -> None:
         lib = self._library
-        lib.sbgc_py_open_com.argtypes = [ctypes.c_char_p, ctypes.c_uint32]
-        lib.sbgc_py_open_com.restype = ctypes.c_void_p
         lib.sbgc_py_close.argtypes = [ctypes.c_void_p]
         lib.sbgc_py_close.restype = None
         lib.sbgc_py_recover.argtypes = [ctypes.c_void_p]
@@ -281,6 +284,7 @@ class NativeLibrary:
         lib.sbgc_py_motors_off.argtypes = [ctypes.c_void_p, ctypes.c_uint8]
         lib.sbgc_py_motors_off.restype = ctypes.c_int
 
+
         lib.sbgc_py_play_beeper.argtypes = [
             ctypes.c_void_p,
             ctypes.c_uint16,
@@ -290,6 +294,7 @@ class NativeLibrary:
             ctypes.c_uint8,
         ]
         lib.sbgc_py_play_beeper.restype = ctypes.c_int
+
 
         lib.sbgc_py_execute_menu.argtypes = [
             ctypes.c_void_p,
@@ -380,12 +385,6 @@ class NativeLibrary:
         ]
         lib.sbgc_py_get_realtime_data_custom.restype = ctypes.c_int
 
-        lib.sbgc_py_copy_last_tx.argtypes = [ctypes.c_void_p, ctypes.POINTER(ctypes.c_uint8), ctypes.c_uint16]
-        lib.sbgc_py_copy_last_tx.restype = ctypes.c_uint16
-        lib.sbgc_py_copy_last_rx.argtypes = [ctypes.c_void_p, ctypes.POINTER(ctypes.c_uint8), ctypes.c_uint16]
-        lib.sbgc_py_copy_last_rx.restype = ctypes.c_uint16
-        lib.sbgc_py_copy_transport_diagnostics.argtypes = [ctypes.c_void_p, ctypes.c_char_p, ctypes.c_uint16]
-        lib.sbgc_py_copy_transport_diagnostics.restype = ctypes.c_uint16
 
     def open_native (self, port: str, baudrate: int) -> int:
         if not isinstance(port, str) or not port:
@@ -418,8 +417,7 @@ class NativeLibrary:
                 "in serialAPI_Config.h."
             )
         raise NativeError(
-            f"RESET transmission failed with native status {status}. "
-            f"Last exchange: {self.last_exchange(device)}"
+            f"RESET transmission failed with native status {status}."
         )
 
     def expect_reset(self, device: int, timeout: float) -> None:
@@ -432,8 +430,7 @@ class NativeLibrary:
                 "in serialAPI_Config.h."
             )
         raise NativeError(
-            f"RESET confirmation was not received in the native Serial API (native status {status}). "
-            f"Last exchange: {self.last_exchange(device)}"
+            f"RESET confirmation was not received in the native Serial API (native status {status})."
         )
 
     def motors_on(self, device: int) -> None:
@@ -446,8 +443,7 @@ class NativeLibrary:
                 "in serialAPI_Config.h."
             )
         raise NativeError(
-            f"MOTORS_ON failed with native status {status}. "
-            f"Last exchange: {self.last_exchange(device)}"
+            f"MOTORS_ON failed with native status {status}."
         )
 
     def motors_off(self, device: int, mode: int) -> None:
@@ -460,8 +456,7 @@ class NativeLibrary:
                 "in serialAPI_Config.h."
             )
         raise NativeError(
-            f"MOTORS_OFF failed with native status {status}. "
-            f"Last exchange: {self.last_exchange(device)}"
+            f"MOTORS_OFF failed with native status {status}."
         )
 
     def play_beeper(
@@ -489,8 +484,7 @@ class NativeLibrary:
                 "in serialAPI_Config.h."
             )
         raise NativeError(
-            f"BEEP_SOUND failed with native status {status}. "
-            f"Last exchange: {self.last_exchange(device)}"
+            f"BEEP_SOUND failed with native status {status}."
         )
 
     def execute_menu(
@@ -516,8 +510,7 @@ class NativeLibrary:
                 "is disabled in serialAPI_Config.h."
             )
         raise NativeError(
-            f"EXECUTE_MENU failed with native status {status}. "
-            f"Last exchange: {self.last_exchange(device)}"
+            f"EXECUTE_MENU failed with native status {status}."
         )
 
     def control(
@@ -536,6 +529,7 @@ class NativeLibrary:
             need_confirmation,
             ctypes.byref(confirmation) if confirmation is not None else None,
         )
+
         if status == NativeStatus.OK:
             return confirmation
         if status == NativeStatus.CONFIRMATION_DISABLED:
@@ -548,11 +542,10 @@ class NativeLibrary:
                 "CONTROL is unavailable: SBGC_CONTROL_MODULE is disabled "
                 "in serialAPI_Config.h."
             )
-        # Never retry a control command: a failed status can still mean the
-        # board received it, and a duplicate may cause an unintended movement.
+        # Never retry a control command. A failed status can still mean the
+        # board received it and a duplicate may cause an unintended movement.
         raise NativeError(
-            f"CONTROL failed with native status {status}. "
-            f"Last exchange: {self.last_exchange(device)}"
+            f"CONTROL failed with native status {status}."
         )
 
     def control_config(
@@ -582,8 +575,7 @@ class NativeLibrary:
                 "in serialAPI_Config.h."
             )
         raise NativeError(
-            f"CONTROL_CONFIG failed with native status {status}. "
-            f"Last exchange: {self.last_exchange(device)}"
+            f"CONTROL_CONFIG failed with native status {status}."
         )
 
     def get_adj_vars(
@@ -602,8 +594,7 @@ class NativeLibrary:
                 "in serialAPI_Config.h."
             )
         raise NativeError(
-            f"GET_ADJ_VARS_VAL failed in the native Serial API with native status {status}. "
-            f"Last exchange: {self.last_exchange(device)}"
+            f"GET_ADJ_VARS_VAL failed in the native Serial API with native status {status}."
         )
 
     def set_adj_vars(
@@ -637,8 +628,7 @@ class NativeLibrary:
         # A failed status can still mean the board applied the new value.
         # Retrying could write the parameter twice, so it is deliberately avoided.
         raise NativeError(
-            f"SET_ADJ_VARS_VAL failed with native status {status}. "
-            f"Last exchange: {self.last_exchange(device)}"
+            f"SET_ADJ_VARS_VAL failed with native status {status}."
         )
 
     def save_adj_vars(
@@ -672,8 +662,7 @@ class NativeLibrary:
         # The board can have already committed the EEPROM write even when a
         # transport error is reported. Never retry it automatically.
         raise NativeError(
-            f"SAVE_PARAMS_3 failed with native status {status}. "
-            f"Last exchange: {self.last_exchange(device)}"
+            f"SAVE_PARAMS_3 failed with native status {status}."
         )
 
     def run_script(self, device: int, mode: int, slot: int) -> None:
@@ -686,8 +675,7 @@ class NativeLibrary:
                 "in serialAPI_Config.h."
             )
         raise NativeError(
-            f"RUN_SCRIPT failed with native status {status}. "
-            f"Last exchange: {self.last_exchange(device)}"
+            f"RUN_SCRIPT failed with native status {status}."
         )
 
     def read_script_debug_info(self, device: int, timeout: float) -> NativeScriptDebugInfo:
@@ -702,8 +690,7 @@ class NativeLibrary:
             )
 
         raise NativeError(
-            f"SCRIPT_DEBUG was not received in the native Serial API (native status {status}). "
-            f"Last exchange: {self.last_exchange(device)}"
+            f"SCRIPT_DEBUG was not received in the native Serial API (native status {status})."
         )
 
     def get_realtime_data_3(self, device: int) -> NativeRealtimeData:
@@ -731,8 +718,7 @@ class NativeLibrary:
             )
 
         raise NativeError(
-            f"REALTIME_DATA_CUSTOM failed in the native Serial API with native status {status}. "
-            f"Last exchange: {self.last_exchange(device)}"
+            f"REALTIME_DATA_CUSTOM failed in the native Serial API with native status {status}."
         )
 
     def _get_realtime_data(self, device: int, version: int) -> NativeRealtimeData:
@@ -752,8 +738,7 @@ class NativeLibrary:
             )
 
         raise NativeError(
-            f"REALTIME_DATA_{version} failed in the native Serial API "
-            f"with native status {status}. Last exchange: {self.last_exchange(device)}"
+            f"REALTIME_DATA_{version} failed in the native Serial API with native status {status}."
         )
 
     def get_angles(self, device: int) -> NativeAngles:
@@ -769,7 +754,7 @@ class NativeLibrary:
 
         raise NativeError(
             "GET_ANGLES failed in the native Serial API with native status "
-            f"{status}. Last exchange: {self.last_exchange(device)}"
+            f"{status}."
         )
 
     def get_angles_ext(self, device: int) -> NativeAnglesExt:
@@ -785,7 +770,7 @@ class NativeLibrary:
 
         raise NativeError(
             "GET_ANGLES_EXT failed in the native Serial API with native status "
-            f"{status}. Last exchange: {self.last_exchange(device)}"
+            f"{status}."
         )
 
     def get_board_info(self, device: int) -> NativeBoardInfo:
@@ -801,7 +786,7 @@ class NativeLibrary:
 
         raise NativeError(
             "GET_BOARD_INFO failed in the native Serial API with native status "
-            f"{status}. Last exchange: {self.last_exchange(device)}"
+            f"{status}."
         )
 
     def get_board_info_3(self, device: int) -> NativeBoardInfo3:
@@ -817,18 +802,14 @@ class NativeLibrary:
 
         raise NativeError(
             "GET_BOARD_INFO_3 failed in the native Serial API "
-            f"with native status {status}. Last exchange: {self.last_exchange(device)}"
+            f"with native status {status}."
         )
 
-    def last_exchange(self, device: int) -> str:
-        def read(function: object) -> bytes:
-            buffer = (ctypes.c_uint8 * 256)()
-            size = function(device, buffer, len(buffer))
-            return bytes(buffer[:size])
 
-        tx = read(self._library.sbgc_py_copy_last_tx)
-        rx = read(self._library.sbgc_py_copy_last_rx)
-        diagnostics = ctypes.create_string_buffer(256)
-        self._library.sbgc_py_copy_transport_diagnostics(device, diagnostics, len(diagnostics))
-        transport = diagnostics.value.decode("ascii", errors="replace") or "-"
-        return f"TX={tx.hex(' ') or '-'}; RX={rx.hex(' ') or '-'}; transport={transport}"
+class NativeLibrary(SerialApiLibrary):
+    """Common SerialAPI wrapper configured for the native Win32 transport."""
+
+    def _configure_functions(self) -> None:
+        super()._configure_functions()
+        self._library.sbgc_py_open_com.argtypes = [ctypes.c_char_p, ctypes.c_uint32]
+        self._library.sbgc_py_open_com.restype = ctypes.c_void_p

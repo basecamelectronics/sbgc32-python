@@ -25,8 +25,6 @@ sbgc_py_status_t sbgc_py_get_adj_vars (
     for (index = 0; index < count; ++index)
         native_vars[index].ID = (sbgcAdjVarID_t)ids[index];
 
-    device->last_tx_size = 0;
-    device->last_rx_size = 0;
     status = SBGC32_GetAdjVarValues(&device->serial_api, native_vars, count);
 
     if (status != sbgcCOMMAND_OK || device->serial_api._lastSerialCommandStatus != serialAPI_TX_RX_OK)
@@ -76,9 +74,6 @@ sbgc_py_status_t sbgc_py_set_adj_vars (
         native_vars[index].value = variables[index].value;
         native_vars[index].syncFlag = AV_NOT_SYNCHRONIZED;
     }
-
-    device->last_tx_size = 0;
-    device->last_rx_size = 0;
 
 #if (SBGC_NEED_CONFIRM_CMD)
     if (need_confirmation)
@@ -148,9 +143,6 @@ sbgc_py_status_t sbgc_py_save_adj_vars (
         native_vars[index].ID = (sbgcAdjVarID_t)ids[index];
         native_vars[index].saveFlag = AV_NOT_SAVED;
     }
-
-    device->last_tx_size = 0;
-    device->last_rx_size = 0;
 
 #if (SBGC_NEED_CONFIRM_CMD)
     if (need_confirmation)
