@@ -2,6 +2,19 @@
 
 #include <string.h>
 
+
+static sbgc_py_status_t sbgc_py_validate_service_device (sbgc_py_device_t *device)
+{
+    if (device == NULL)
+        return SBGC_PY_INVALID_ARGUMENT;
+    if (!device->connected)
+        return SBGC_PY_NOT_CONNECTED;
+    if (current_device != device)
+        return SBGC_PY_ERROR;
+    return SBGC_PY_OK;
+}
+
+
 sbgc_py_status_t sbgc_py_get_board_info (sbgc_py_device_t *device, sbgc_py_board_info_t *board_info)
 {
 #if (SBGC_SERVICE_MODULE)
@@ -369,6 +382,412 @@ sbgc_py_status_t sbgc_py_read_script_debug_info (sbgc_py_device_t *device, sbgc_
 #else
     (void)device;
     (void)script_debug_info;
+    return SBGC_PY_MODULE_DISABLED;
+#endif
+}
+
+
+sbgc_py_status_t sbgc_py_tune_auto_pid (
+    sbgc_py_device_t *device, const sbgc_py_auto_pid_t *config,
+    uint8_t need_confirmation, sbgc_py_confirmation_t *confirmation
+)
+{
+#if (SBGC_SERVICE_MODULE)
+    sbgcAutoPID_t native_config;
+    sbgcCommandStatus_t status;
+    sbgc_py_status_t device_status = sbgc_py_validate_service_device(device);
+
+    if (device_status != SBGC_PY_OK)
+        return device_status;
+    if (config == NULL || (need_confirmation && confirmation == NULL))
+        return SBGC_PY_INVALID_ARGUMENT;
+    _Static_assert(sizeof(native_config) == sizeof(*config), "AutoPID ABI mismatch");
+    memcpy(&native_config, config, sizeof(native_config));
+
+#if (SBGC_NEED_CONFIRM_CMD)
+    if (need_confirmation)
+    {
+        sbgcConfirm_t native_confirmation = { 0 };
+        status = SBGC32_TuneAutoPID(&device->serial_api, &native_config, &native_confirmation);
+        if (status != sbgcCOMMAND_OK || device->serial_api._lastSerialCommandStatus != serialAPI_TX_RX_OK)
+            return SBGC_PY_COMMUNICATION_ERROR;
+        sbgc_py_copy_confirmation(confirmation, &native_confirmation);
+        return SBGC_PY_OK;
+    }
+#else
+    if (need_confirmation)
+        return SBGC_PY_CONFIRMATION_DISABLED;
+#endif
+
+    status = SBGC32_TuneAutoPID(&device->serial_api, &native_config, SBGC_NO_CONFIRM);
+    return (status == sbgcCOMMAND_OK && device->serial_api._lastSerialCommandStatus == serialAPI_TX_RX_OK)
+        ? SBGC_PY_OK : SBGC_PY_COMMUNICATION_ERROR;
+#else
+    (void)device; (void)config; (void)need_confirmation; (void)confirmation;
+    return SBGC_PY_MODULE_DISABLED;
+#endif
+}
+
+
+sbgc_py_status_t sbgc_py_break_auto_pid (
+    sbgc_py_device_t *device, uint8_t need_confirmation,
+    sbgc_py_confirmation_t *confirmation
+)
+{
+#if (SBGC_SERVICE_MODULE)
+    sbgcCommandStatus_t status;
+    sbgc_py_status_t device_status = sbgc_py_validate_service_device(device);
+
+    if (device_status != SBGC_PY_OK)
+        return device_status;
+    if (need_confirmation && confirmation == NULL)
+        return SBGC_PY_INVALID_ARGUMENT;
+#if (SBGC_NEED_CONFIRM_CMD)
+    if (need_confirmation)
+    {
+        sbgcConfirm_t native_confirmation = { 0 };
+        status = SBGC32_BreakAutoPID_Tuning(&device->serial_api, &native_confirmation);
+        if (status != sbgcCOMMAND_OK || device->serial_api._lastSerialCommandStatus != serialAPI_TX_RX_OK)
+            return SBGC_PY_COMMUNICATION_ERROR;
+        sbgc_py_copy_confirmation(confirmation, &native_confirmation);
+        return SBGC_PY_OK;
+    }
+#else
+    if (need_confirmation)
+        return SBGC_PY_CONFIRMATION_DISABLED;
+#endif
+    status = SBGC32_BreakAutoPID_Tuning(&device->serial_api, SBGC_NO_CONFIRM);
+    return (status == sbgcCOMMAND_OK && device->serial_api._lastSerialCommandStatus == serialAPI_TX_RX_OK)
+        ? SBGC_PY_OK : SBGC_PY_COMMUNICATION_ERROR;
+#else
+    (void)device; (void)need_confirmation; (void)confirmation;
+    return SBGC_PY_MODULE_DISABLED;
+#endif
+}
+
+
+sbgc_py_status_t sbgc_py_tune_auto_pid2 (
+    sbgc_py_device_t *device, const sbgc_py_auto_pid2_t *config,
+    uint8_t need_confirmation, sbgc_py_confirmation_t *confirmation
+)
+{
+#if (SBGC_SERVICE_MODULE)
+    sbgcAutoPID2_t native_config;
+    sbgcCommandStatus_t status;
+    sbgc_py_status_t device_status = sbgc_py_validate_service_device(device);
+
+    if (device_status != SBGC_PY_OK)
+        return device_status;
+    if (config == NULL || (need_confirmation && confirmation == NULL))
+        return SBGC_PY_INVALID_ARGUMENT;
+    _Static_assert(sizeof(native_config) == sizeof(*config), "AutoPID2 ABI mismatch");
+    memcpy(&native_config, config, sizeof(native_config));
+#if (SBGC_NEED_CONFIRM_CMD)
+    if (need_confirmation)
+    {
+        sbgcConfirm_t native_confirmation = { 0 };
+        status = SBGC32_TuneAutoPID2(&device->serial_api, &native_config, &native_confirmation);
+        if (status != sbgcCOMMAND_OK || device->serial_api._lastSerialCommandStatus != serialAPI_TX_RX_OK)
+            return SBGC_PY_COMMUNICATION_ERROR;
+        sbgc_py_copy_confirmation(confirmation, &native_confirmation);
+        return SBGC_PY_OK;
+    }
+#else
+    if (need_confirmation)
+        return SBGC_PY_CONFIRMATION_DISABLED;
+#endif
+    status = SBGC32_TuneAutoPID2(&device->serial_api, &native_config, SBGC_NO_CONFIRM);
+    return (status == sbgcCOMMAND_OK && device->serial_api._lastSerialCommandStatus == serialAPI_TX_RX_OK)
+        ? SBGC_PY_OK : SBGC_PY_COMMUNICATION_ERROR;
+#else
+    (void)device; (void)config; (void)need_confirmation; (void)confirmation;
+    return SBGC_PY_MODULE_DISABLED;
+#endif
+}
+
+
+sbgc_py_status_t sbgc_py_read_auto_pid_state (
+    sbgc_py_device_t *device, sbgc_py_auto_pid_state_t *state
+)
+{
+#if (SBGC_SERVICE_MODULE)
+    sbgcAutoPID_State_t native_state = { 0 };
+    sbgcCommandStatus_t status;
+    sbgc_py_status_t device_status = sbgc_py_validate_service_device(device);
+
+    if (device_status != SBGC_PY_OK)
+        return device_status;
+    if (state == NULL)
+        return SBGC_PY_INVALID_ARGUMENT;
+    _Static_assert(sizeof(native_state) == sizeof(*state), "AutoPID state ABI mismatch");
+    status = SBGC32_ReadAutoPID_StateCmd(&device->serial_api, &native_state);
+    if (status != sbgcCOMMAND_OK || device->serial_api._lastSerialCommandStatus != serialAPI_TX_RX_OK)
+        return SBGC_PY_COMMUNICATION_ERROR;
+    memcpy(state, &native_state, sizeof(*state));
+    return SBGC_PY_OK;
+#else
+    (void)device; (void)state;
+    return SBGC_PY_MODULE_DISABLED;
+#endif
+}
+
+
+sbgc_py_status_t sbgc_py_synchronize_motors (
+    sbgc_py_device_t *device, const sbgc_py_sync_motors_t *config,
+    uint8_t need_confirmation, sbgc_py_confirmation_t *confirmation
+)
+{
+#if (SBGC_SERVICE_MODULE)
+    sbgcSyncMotors_t native_config;
+    sbgcCommandStatus_t status;
+    sbgc_py_status_t device_status = sbgc_py_validate_service_device(device);
+
+    if (device_status != SBGC_PY_OK)
+        return device_status;
+    if (config == NULL || config->axis > SYNC_MOTOR_AXIS_YAW ||
+        (need_confirmation && confirmation == NULL))
+        return SBGC_PY_INVALID_ARGUMENT;
+    _Static_assert(sizeof(native_config) == sizeof(*config), "Sync motors ABI mismatch");
+    memcpy(&native_config, config, sizeof(native_config));
+#if (SBGC_NEED_CONFIRM_CMD)
+    if (need_confirmation)
+    {
+        sbgcConfirm_t native_confirmation = { 0 };
+        status = SBGC32_SynchronizeMotors(&device->serial_api, &native_config, &native_confirmation);
+        if (status != sbgcCOMMAND_OK || device->serial_api._lastSerialCommandStatus != serialAPI_TX_RX_OK)
+            return SBGC_PY_COMMUNICATION_ERROR;
+        sbgc_py_copy_confirmation(confirmation, &native_confirmation);
+        return SBGC_PY_OK;
+    }
+#else
+    if (need_confirmation)
+        return SBGC_PY_CONFIRMATION_DISABLED;
+#endif
+    status = SBGC32_SynchronizeMotors(&device->serial_api, &native_config, SBGC_NO_CONFIRM);
+    return (status == sbgcCOMMAND_OK && device->serial_api._lastSerialCommandStatus == serialAPI_TX_RX_OK)
+        ? SBGC_PY_OK : SBGC_PY_COMMUNICATION_ERROR;
+#else
+    (void)device; (void)config; (void)need_confirmation; (void)confirmation;
+    return SBGC_PY_MODULE_DISABLED;
+#endif
+}
+
+
+sbgc_py_status_t sbgc_py_request_motor_state (
+    sbgc_py_device_t *device, uint8_t motor_id, uint32_t data_set,
+    uint8_t *result, uint16_t size
+)
+{
+#if (SBGC_SERVICE_MODULE)
+    sbgcCommandStatus_t status;
+    sbgc_py_status_t device_status = sbgc_py_validate_service_device(device);
+
+    if (device_status != SBGC_PY_OK)
+        return device_status;
+    if (result == NULL || size < sizeof(data_set))
+        return SBGC_PY_INVALID_ARGUMENT;
+    memset(result, 0, size);
+    memcpy(result, &data_set, sizeof(data_set));
+    status = SBGC32_RequestMotorState(
+        &device->serial_api, (sbgcExtMotorID_t)motor_id, result, size
+    );
+    return (status == sbgcCOMMAND_OK && device->serial_api._lastSerialCommandStatus == serialAPI_TX_RX_OK)
+        ? SBGC_PY_OK : SBGC_PY_COMMUNICATION_ERROR;
+#else
+    (void)device; (void)motor_id; (void)data_set; (void)result; (void)size;
+    return SBGC_PY_MODULE_DISABLED;
+#endif
+}
+
+
+sbgc_py_status_t sbgc_py_read_motor_state (sbgc_py_device_t *device, uint8_t *result, uint16_t size)
+{
+#if (SBGC_SERVICE_MODULE)
+    sbgcCommandStatus_t status;
+    sbgc_py_status_t device_status = sbgc_py_validate_service_device(device);
+
+    if (device_status != SBGC_PY_OK)
+        return device_status;
+    if (result == NULL || size == 0)
+        return SBGC_PY_INVALID_ARGUMENT;
+    status = SBGC32_ReadMotorState(&device->serial_api, result, size);
+    return (status == sbgcCOMMAND_OK && device->serial_api._lastSerialCommandStatus == serialAPI_TX_RX_OK)
+        ? SBGC_PY_OK : SBGC_PY_COMMUNICATION_ERROR;
+#else
+    (void)device; (void)result; (void)size;
+    return SBGC_PY_MODULE_DISABLED;
+#endif
+}
+
+
+sbgc_py_status_t sbgc_py_set_boot_mode (
+    sbgc_py_device_t *device, uint8_t extended, uint8_t need_confirmation,
+    uint16_t delay_ms
+)
+{
+#if (SBGC_SERVICE_MODULE)
+    sbgcCommandStatus_t status;
+    sbgc_py_status_t device_status = sbgc_py_validate_service_device(device);
+
+    if (device_status != SBGC_PY_OK)
+        return device_status;
+    if (extended > 1 || need_confirmation > 1)
+        return SBGC_PY_INVALID_ARGUMENT;
+    status = extended
+        ? SBGC32_SetBootModeExt(&device->serial_api, (sbgcBoolean_t)need_confirmation, delay_ms)
+        : SBGC32_SetBootMode(&device->serial_api);
+    return status == sbgcCOMMAND_OK ? SBGC_PY_OK : SBGC_PY_COMMUNICATION_ERROR;
+#else
+    (void)device; (void)extended; (void)need_confirmation; (void)delay_ms;
+    return SBGC_PY_MODULE_DISABLED;
+#endif
+}
+
+
+sbgc_py_status_t sbgc_py_write_state_vars (
+    sbgc_py_device_t *device, const sbgc_py_state_vars_t *state,
+    uint8_t need_confirmation, sbgc_py_confirmation_t *confirmation
+)
+{
+#if (SBGC_SERVICE_MODULE)
+    sbgcStateVars_t native_state;
+    sbgcCommandStatus_t status;
+    sbgc_py_status_t device_status = sbgc_py_validate_service_device(device);
+
+    if (device_status != SBGC_PY_OK)
+        return device_status;
+    if (state == NULL || (need_confirmation && confirmation == NULL))
+        return SBGC_PY_INVALID_ARGUMENT;
+    _Static_assert(sizeof(native_state) == sizeof(*state), "State vars ABI mismatch");
+    memcpy(&native_state, state, sizeof(native_state));
+#if (SBGC_NEED_CONFIRM_CMD)
+    if (need_confirmation)
+    {
+        sbgcConfirm_t native_confirmation = { 0 };
+        status = SBGC32_WriteStateVars(&device->serial_api, &native_state, &native_confirmation);
+        if (status != sbgcCOMMAND_OK || device->serial_api._lastSerialCommandStatus != serialAPI_TX_RX_OK)
+            return SBGC_PY_COMMUNICATION_ERROR;
+        sbgc_py_copy_confirmation(confirmation, &native_confirmation);
+        return SBGC_PY_OK;
+    }
+#else
+    if (need_confirmation)
+        return SBGC_PY_CONFIRMATION_DISABLED;
+#endif
+    status = SBGC32_WriteStateVars(&device->serial_api, &native_state, SBGC_NO_CONFIRM);
+    return (status == sbgcCOMMAND_OK && device->serial_api._lastSerialCommandStatus == serialAPI_TX_RX_OK)
+        ? SBGC_PY_OK : SBGC_PY_COMMUNICATION_ERROR;
+#else
+    (void)device; (void)state; (void)need_confirmation; (void)confirmation;
+    return SBGC_PY_MODULE_DISABLED;
+#endif
+}
+
+
+sbgc_py_status_t sbgc_py_read_state_vars (
+    sbgc_py_device_t *device, sbgc_py_state_vars_t *state
+)
+{
+#if (SBGC_SERVICE_MODULE)
+    sbgcStateVars_t native_state = { 0 };
+    sbgcCommandStatus_t status;
+    sbgc_py_status_t device_status = sbgc_py_validate_service_device(device);
+
+    if (device_status != SBGC_PY_OK)
+        return device_status;
+    if (state == NULL)
+        return SBGC_PY_INVALID_ARGUMENT;
+    _Static_assert(sizeof(native_state) == sizeof(*state), "State vars ABI mismatch");
+    status = SBGC32_ReadStateVars(&device->serial_api, &native_state);
+    if (status != sbgcCOMMAND_OK || device->serial_api._lastSerialCommandStatus != serialAPI_TX_RX_OK)
+        return SBGC_PY_COMMUNICATION_ERROR;
+    memcpy(state, &native_state, sizeof(*state));
+    return SBGC_PY_OK;
+#else
+    (void)device; (void)state;
+    return SBGC_PY_MODULE_DISABLED;
+#endif
+}
+
+
+sbgc_py_status_t sbgc_py_set_debug_port (
+    sbgc_py_device_t *device, uint8_t action, uint32_t filter,
+    uint8_t need_confirmation, sbgc_py_confirmation_t *confirmation
+)
+{
+#if (SBGC_SERVICE_MODULE)
+    sbgcCommandStatus_t status;
+    sbgc_py_status_t device_status = sbgc_py_validate_service_device(device);
+
+    if (device_status != SBGC_PY_OK)
+        return device_status;
+    if (action > DPA_START_USING_DEBUG_PORT || (need_confirmation && confirmation == NULL))
+        return SBGC_PY_INVALID_ARGUMENT;
+#if (SBGC_NEED_CONFIRM_CMD)
+    if (need_confirmation)
+    {
+        sbgcConfirm_t native_confirmation = { 0 };
+        status = SBGC32_SetDebugPort(&device->serial_api, (sbgcDebugPortAction_t)action, filter, &native_confirmation);
+        if (status != sbgcCOMMAND_OK || device->serial_api._lastSerialCommandStatus != serialAPI_TX_RX_OK)
+            return SBGC_PY_COMMUNICATION_ERROR;
+        sbgc_py_copy_confirmation(confirmation, &native_confirmation);
+        return SBGC_PY_OK;
+    }
+#else
+    if (need_confirmation)
+        return SBGC_PY_CONFIRMATION_DISABLED;
+#endif
+    status = SBGC32_SetDebugPort(&device->serial_api, (sbgcDebugPortAction_t)action, filter, SBGC_NO_CONFIRM);
+    return (status == sbgcCOMMAND_OK && device->serial_api._lastSerialCommandStatus == serialAPI_TX_RX_OK)
+        ? SBGC_PY_OK : SBGC_PY_COMMUNICATION_ERROR;
+#else
+    (void)device; (void)action; (void)filter; (void)need_confirmation; (void)confirmation;
+    return SBGC_PY_MODULE_DISABLED;
+#endif
+}
+
+
+sbgc_py_status_t sbgc_py_read_debug_port (
+    sbgc_py_device_t *device, uint16_t *time_ms, uint8_t *port_and_direction,
+    uint8_t *command_id, uint8_t *payload, uint16_t payload_capacity
+)
+{
+#if (SBGC_SERVICE_MODULE)
+    sbgcDebugPortData_t native_data;
+    sbgcCommandStatus_t status;
+    uint8_t buffered_payload_size;
+    sbgc_py_status_t device_status = sbgc_py_validate_service_device(device);
+
+    if (device_status != SBGC_PY_OK)
+        return device_status;
+    if (time_ms == NULL || port_and_direction == NULL || command_id == NULL ||
+        payload == NULL || payload_capacity < SBGC_MAX_PAYLOAD_SIZE)
+        return SBGC_PY_INVALID_ARGUMENT;
+
+    /*
+     * Debug records are unsolicited.  A record may have arrived while another
+     * blocking SerialAPI command was waiting for its own response; in that
+     * case SerialAPI ignores the different command ID.  The native COM
+     * transport preserves a copy before that filtering happens.
+     */
+    if (sbgc_py_transport_pop_debug_packet(
+            device->context, time_ms, port_and_direction, command_id, payload,
+            &buffered_payload_size))
+        return SBGC_PY_OK;
+
+    /* Do not enqueue a second copy while this call itself receives a record. */
+    sbgc_py_transport_set_debug_capture_suppressed(device->context, 1);
+    native_data.payload = payload;
+    status = SBGC32_ReadDebugPort(&device->serial_api, &native_data);
+    sbgc_py_transport_set_debug_capture_suppressed(device->context, 0);
+    if (status != sbgcCOMMAND_OK || device->serial_api._lastSerialCommandStatus != serialAPI_TX_RX_OK)
+        return SBGC_PY_COMMUNICATION_ERROR;
+    *time_ms = native_data.timeMs;
+    *port_and_direction = native_data.portAndDir;
+    *command_id = native_data.cmdID;
+    return SBGC_PY_OK;
+#else
+    (void)device; (void)time_ms; (void)port_and_direction; (void)command_id; (void)payload; (void)payload_capacity;
     return SBGC_PY_MODULE_DISABLED;
 #endif
 }

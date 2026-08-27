@@ -28,9 +28,7 @@ def validate_uint(value: object, name: str, maximum: int) -> int:
     return int(value)
 
 
-def validate_int_tuple(
-    values: object, name: str, length: int, maximum: int
-) -> tuple[int, ...]:
+def validate_int_tuple(values: object, name: str, length: int, maximum: int) -> tuple[int, ...]:
     if not isinstance(values, tuple) or len(values) != length:
         raise ValueError(f"{name} must be a tuple with {length} entries")
     return tuple(validate_uint(value, name, maximum) for value in values)
@@ -70,7 +68,6 @@ def make_confirmation(confirmation: object) -> CommandConfirmation | None:
 
 
 def control(self, axes: tuple[ControlAxis, ControlAxis, ControlAxis], *, need_confirmation: bool = False) -> CommandConfirmation | None:
-    """Send CMD_CONTROL for roll, pitch, and yaw in that order."""
     self._ensure_open()
     if len(axes) != 3:
         raise ValueError("axes must contain exactly roll, pitch, and yaw")
@@ -144,3 +141,32 @@ def configure_control(
 def control_config(self, config: ControlConfig | None = None, *, confirm_control: bool | None = None, need_confirmation: bool = False) -> CommandConfirmation | None:
     """Alias for :func:`configure_control`."""
     return configure_control(self, config, confirm_control=confirm_control, need_confirmation=need_confirmation)
+
+
+_API_VIRTUAL_CHANNEL_COUNT = 32
+_API_VIRTUAL_UNDEFINED = -10000
+_API_VIRTUAL_MIN = -500
+_API_VIRTUAL_MAX = 500
+
+def set_api_virtual_channels(self, values: object) -> None:
+    self._ensure_open()
+
+    try:
+        requested = tuple(values)
+    except TypeError as error:
+        raise TypeError("Values must be an iterable of channels values or None") from error
+
+    if not 1 <= len(requested) <= _API_VIRTUAL_CHANNEL_COUNT:
+        raise ValueError("Values must be in range from 1 to 32")
+
+    native_values: list[int] = []
+
+    for index, value in enumerate(requested, start=1):
+        if value is None:
+            native_values.append(_API_VIRTUAL_UNDEFINED)
+        elif isinstance(value, int) and _API_VIRTUAL_MIN <= value <= _API_VIRTUAL_MAX:
+            native_values.append(value)
+        else:
+            raise ValueError(f"Channel {index} must be in range {_API_VIRTUAL_MIN}...{_API_VIRTUAL_MAX} or None")
+
+    self._native.set_api_virtual_channels(self._device, tuple(native_values))

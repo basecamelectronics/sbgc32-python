@@ -7,6 +7,9 @@ class Command(IntEnum):
     # Device information
     CMD_BOARD_INFO              = 86    # Request board and firmware information
     CMD_BOARD_INFO_3            = 20    # Request additional board information
+    CMD_AUTO_PID                = 35    # Starts automatic PID calibration !
+    CMD_AUTO_PID2               = 108   # Starts automatic PID calibration ver.2
+    CMD_SYNC_MOTORS             = 123   # Mechanically align motors working in parallel for a single axis
 
     # Real-time state monitoring and diagnostics
     CMD_REALTIME_DATA_CUSTOM    = 88    # Request configurable realtime data
@@ -15,6 +18,10 @@ class Command(IntEnum):
     CMD_REALTIME_DATA_4         = 25    # Receive extended version of real-time data
     CMD_GET_ANGLES              = 73    # Request information related to IMU angles and RC control state
     CMD_GET_ANGLES_EXT          = 61    # Request information related to IMU angles and RC control state
+    CMD_SELECT_IMU_3            = 24    # Select an IMU or run its calibration action
+    CMD_DEBUG_VARS_INFO_3       = 253
+    CMD_DEBUG_VARS_3            = 254
+    CMD_CONTROL_QUAT_STATUS     = 141   # Read quaternion-control status
 
     # Run-time gimbal parameters
     CMD_SAVE_PARAMS_3           = 32    # Saves current values of parameters linked to adjustable variables in EEPROM

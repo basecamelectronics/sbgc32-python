@@ -18,6 +18,8 @@ Files Description
 
 [`dist/`](dist/) - wheels for import. Interaction with port through native_c (only on Windows) or pyserial;
 
+[`docs/`](docs/) - documentation;
+
 [`examples/`](examples/) - executable examples for connecting to and testing a controller;
 
 [`src/sbgc32/`](src/sbgc32/) - Python package: public API, value types,
@@ -149,6 +151,17 @@ In `.py` file import library:
     from sbgc32 import SimpleBGC
     ```
 You can also see a description of command use `print(SimpleBGC.name_of_function.__doc__)` 
+
+Documentation
+-----------
+Build the local documentation site:
+
+```powershell
+py -m pip install -r .\docs\requirements.txt
+py -m sphinx -W --keep-going -b html .\docs\source .\docs\build\html
+```
+
+See [`docs/README.md`](docs/README.md) for details.
 
 Feedback
 -----------

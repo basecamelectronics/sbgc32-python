@@ -1,0 +1,10 @@
+/*
+ * Colour variables are supplied through html_theme_options in conf.py.
+ * The classic theme has a narrow fixed sidebar; generated API names can be
+ * longer than its width, so allow them to wrap instead of covering the page.
+ */
+
+div.sphinxsidebar li,
+div.sphinxsidebar a {
+    overflow-wrap: anywhere;
+}

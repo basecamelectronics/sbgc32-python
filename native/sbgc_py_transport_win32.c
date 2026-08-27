@@ -66,6 +66,16 @@ static sbgcTicks_t sbgc_py_get_time_ms (void)
 #ifdef _WIN32
 typedef struct
 {
+    uint16_t time_ms;
+    uint8_t port_and_direction;
+    uint8_t command_id;
+    uint8_t payload_size;
+    uint8_t payload[SBGC_MAX_PAYLOAD_SIZE];
+}   sbgc_native_debug_packet_t;
+
+
+typedef struct
+{
     HANDLE handle;
     HANDLE stop_event;
     HANDLE rx_ready_event;
@@ -75,16 +85,171 @@ typedef struct
     uint16_t rx_start;
     uint16_t rx_size;
     int rx_overflow;
+    uint8_t debug_scan[SBGC_MAX_PAYLOAD_SIZE + 6];
+    uint16_t debug_scan_size;
+    sbgc_native_debug_packet_t debug_packets[8];
+    uint8_t debug_packet_start;
+    uint8_t debug_packet_count;
+    uint32_t debug_packet_drops;
+    int debug_capture_suppressed;
     int lock_initialized;
 }   sbgc_py_com_t;
 
 static sbgc_py_com_t *current_com;
 
 
+/* Same CRC-16 calculation used by SerialAPI P2 frames (the library helper is
+ * intentionally private to lowLayer.c). */
+static uint16_t sbgc_native_crc16 (const uint8_t *data, uint16_t length)
+{
+    uint16_t crc_register = 0;
+    uint8_t shift_register, data_bit, crc_bit;
+    uint16_t i;
+
+    for (i = 0; i < length; i++)
+    {
+        for (shift_register = 1; shift_register > 0; shift_register <<= 1)
+        {
+            data_bit = (data[i] & shift_register) ? 1 : 0;
+            crc_bit = (uint8_t)(crc_register >> 15);
+            crc_register <<= 1;
+            if (data_bit != crc_bit)
+                crc_register ^= 0x8005U;
+        }
+    }
+
+    return crc_register;
+}
+
+
+static void sbgc_native_com_save_debug_packet (sbgc_py_com_t *com)
+{
+    const uint8_t *frame = com->debug_scan;
+    uint8_t payload_size = frame[2];
+    sbgc_native_debug_packet_t *packet;
+    uint16_t crc;
+    uint8_t index;
+
+    if (com->debug_capture_suppressed || frame[1] != CMD_SET_DEBUG_PORT || payload_size < 4)
+        return;
+
+    crc = sbgc_native_crc16(frame + 1, (uint16_t)(payload_size + 3));
+    if ((uint8_t)crc != frame[payload_size + 4] ||
+        (uint8_t)(crc >> 8) != frame[payload_size + 5])
+        return;
+
+    if (com->debug_packet_count == (sizeof(com->debug_packets) / sizeof(com->debug_packets[0])))
+    {
+        com->debug_packet_start = (uint8_t)((com->debug_packet_start + 1) %
+            (sizeof(com->debug_packets) / sizeof(com->debug_packets[0])));
+        com->debug_packet_count--;
+        com->debug_packet_drops++;
+    }
+
+    index = (uint8_t)((com->debug_packet_start + com->debug_packet_count) %
+        (sizeof(com->debug_packets) / sizeof(com->debug_packets[0])));
+    packet = &com->debug_packets[index];
+    packet->time_ms = (uint16_t)(frame[4] | ((uint16_t)frame[5] << 8));
+    packet->port_and_direction = frame[6];
+    packet->command_id = frame[7];
+    packet->payload_size = (uint8_t)(payload_size - 4);
+    memcpy(packet->payload, frame + 8, packet->payload_size);
+    com->debug_packet_count++;
+}
+
+
+static void sbgc_native_com_scan_debug_byte (sbgc_py_com_t *com, uint8_t byte)
+{
+    uint16_t expected_size;
+
+restart:
+    if (com->debug_scan_size == 0)
+    {
+        if (byte == 0x24U)  /* SBGC P2 start character ('$') */
+            com->debug_scan[com->debug_scan_size++] = byte;
+        return;
+    }
+
+    com->debug_scan[com->debug_scan_size++] = byte;
+
+    if (com->debug_scan_size == 4)
+    {
+        if ((uint8_t)(com->debug_scan[1] + com->debug_scan[2]) != com->debug_scan[3])
+        {
+            com->debug_scan_size = 0;
+            goto restart;
+        }
+    }
+
+    if (com->debug_scan_size < 4)
+        return;
+
+    expected_size = (uint16_t)(com->debug_scan[2] + 6);
+    if (com->debug_scan_size < expected_size)
+        return;
+
+    if (com->debug_scan_size == expected_size)
+        sbgc_native_com_save_debug_packet(com);
+
+    com->debug_scan_size = 0;
+}
+
+
+int sbgc_py_transport_pop_debug_packet(
+    void *context, uint16_t *time_ms, uint8_t *port_and_direction,
+    uint8_t *command_id, uint8_t *payload, uint8_t *payload_size
+)
+{
+    sbgc_py_com_t *com = (sbgc_py_com_t *)context;
+    sbgc_native_debug_packet_t *packet;
+
+    if (com == NULL || time_ms == NULL || port_and_direction == NULL || command_id == NULL ||
+        payload == NULL || payload_size == NULL)
+        return 0;
+
+    EnterCriticalSection(&com->rx_lock);
+    if (com->debug_packet_count == 0)
+    {
+        LeaveCriticalSection(&com->rx_lock);
+        return 0;
+    }
+
+    packet = &com->debug_packets[com->debug_packet_start];
+    *time_ms = packet->time_ms;
+    *port_and_direction = packet->port_and_direction;
+    *command_id = packet->command_id;
+    *payload_size = packet->payload_size;
+    memcpy(payload, packet->payload, packet->payload_size);
+    com->debug_packet_start = (uint8_t)((com->debug_packet_start + 1) %
+        (sizeof(com->debug_packets) / sizeof(com->debug_packets[0])));
+    com->debug_packet_count--;
+    LeaveCriticalSection(&com->rx_lock);
+    return 1;
+}
+
+
+void sbgc_py_transport_set_debug_capture_suppressed(void *context, int suppressed)
+{
+    sbgc_py_com_t *com = (sbgc_py_com_t *)context;
+
+    if (com == NULL)
+        return;
+
+    EnterCriticalSection(&com->rx_lock);
+    com->debug_capture_suppressed = suppressed != 0;
+    LeaveCriticalSection(&com->rx_lock);
+}
+
+
 static void sbgc_native_com_wait_for_data (void)
 {
     if (current_com != NULL && current_com->rx_ready_event != NULL)
-        WaitForSingleObject(current_com->rx_ready_event, INFINITE);
+        /*
+         * Do not block indefinitely: SerialAPI measures its own command
+         * timeout around this callback.  A short wait keeps idle CPU low while
+         * letting a missing response finish with a regular timeout.
+         */
+        WaitForSingleObject(current_com->rx_ready_event, 1);
 }
 
 
@@ -104,6 +269,7 @@ static void sbgc_native_com_append (sbgc_py_com_t *com, const uint8_t *data, DWO
 
         for (item = 0; item < size; item++)
         {
+            sbgc_native_com_scan_debug_byte(com, data[item]);
             com->rx_buffer[index] = data[item];
             index = (uint16_t)((index + 1) % sizeof(com->rx_buffer));
         }

@@ -1,0 +1,17 @@
+{
+  "ExpandedNodes": [
+    "",
+    "\\docs",
+    "\\docs\\build\\html",
+    "\\docs\\source",
+    "\\src",
+    "\\src\\sbgc32",
+    "\\vendor",
+    "\\vendor\\serialAPI",
+    "\\vendor\\serialAPI\\modules",
+    "\\vendor\\serialAPI\\modules\\realtime",
+    "\\vendor\\serialAPI\\modules\\service"
+  ],
+  "SelectedNode": "\\docs\\todo.txt",
+  "PreviewInSolutionExplorer": false
+}

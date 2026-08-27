@@ -31,6 +31,28 @@ void SerialAPI_CommandWaitingHandler (sbgcGeneral_t *gSBGC)
 sbgc_py_device_t *current_device;
 
 
+int sbgc_py_transport_pop_debug_packet(
+    void *context, uint16_t *time_ms, uint8_t *port_and_direction,
+    uint8_t *command_id, uint8_t *payload, uint8_t *payload_size
+)
+{
+    (void)context;
+    (void)time_ms;
+    (void)port_and_direction;
+    (void)command_id;
+    (void)payload;
+    (void)payload_size;
+    return 0;
+}
+
+
+void sbgc_py_transport_set_debug_capture_suppressed(void *context, int suppressed)
+{
+    (void)context;
+    (void)suppressed;
+}
+
+
 static sbgcTicks_t sbgc_py_get_time_ms (void)
 {
     if (current_device == NULL || current_device->get_time_ms == NULL)
@@ -95,7 +117,8 @@ static sbgcCommandStatus_t sbgc_py_setup_device (sbgc_py_device_t *device)
 }
 
 
-SBGC_PY_API sbgc_py_device_t *sbgc_py_open (
+SBGC_PY_API sbgc_py_device_t *sbgc_py_open
+(
     void *context,
     sbgc_py_tx_callback_t transmit,
     sbgc_py_rx_callback_t receive_byte,

@@ -1,6 +1,6 @@
 # Python environments, caches and generated build outputs
 /build/
-/build-x64/
+/native/build-x64/
 /native/build/
 /.venv/
 /.venv-new/
@@ -13,8 +13,8 @@ __pycache__/
 .mypy_cache/
 .ruff_cache/
 
-# Local documentation and source materials
-/docs/
+# Generated documentation site
+/docs/build/
 
 # CMake and generated native libraries: release them as wheels, not source files.
 /src/sbgc32/_native/*.dll
@@ -29,3 +29,6 @@ __pycache__/
 
 # Workspace for test
 Test.py
+todo.txt
+mask_probe.py
+transport_benchmark.py

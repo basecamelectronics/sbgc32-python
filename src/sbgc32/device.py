@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from time import sleep
 
+from collections.abc import Sequence
 from . import _adjvars, _control, _realtime, _service
 from ._serial_api_library import NativeError
 from .backends import create_backend
@@ -10,10 +11,19 @@ from .types import (
     AdjustableVariable,
     Angles,
     AnglesExt,
+    AutoPid2Config,
+    AutoPidConfig,
+    AutoPidState,
     BeeperMode,
     BoardInfo,
     BoardInfo3,
     CommandConfirmation,
+    ControlQuatStatus,
+    ControlQuatStatusFlag,
+    DebugPortPacket,
+    DataStreamConfig,
+    DebugVarInfo,
+    ImuType,
     ControlAxis,
     ControlConfig,
     MotorsOffMode,
@@ -21,7 +31,10 @@ from .types import (
     RealtimeData4,
     RealtimeDataCustom,
     RealtimeDataCustomFlag,
+    SelectImuAction,
     ScriptDebugInfo,
+    StateVars,
+    SyncMotorsConfig,
 )
 
 
@@ -79,6 +92,22 @@ class SimpleBGC:
             flags = self._required_argument(command, kwargs, "flags")
             self._reject_remaining_arguments(command, kwargs)
             return self.get_realtime_data_custom(flags)
+        if command is Command.CMD_CONTROL_QUAT_STATUS:
+            flags = self._required_argument(command, kwargs, "flags")
+            self._reject_remaining_arguments(command, kwargs)
+            return self.get_control_quat_status(flags)
+        if command is Command.CMD_SELECT_IMU_3:
+            imu_type = self._required_argument(command, kwargs, "imu_type")
+            action = kwargs.pop("action", SelectImuAction.SIMPLE_SELECT)
+            time_ms = kwargs.pop("time_ms", 0)
+            need_confirmation = kwargs.pop("need_confirmation", False)
+            self._reject_remaining_arguments(command, kwargs)
+            return self.select_imu_3(
+                imu_type,
+                action,
+                time_ms,
+                need_confirmation=need_confirmation,
+            )
         if command is Command.CMD_GET_ADJ_VARS_VAL:
             ids = self._required_argument(command, kwargs, "ids")
             self._reject_remaining_arguments(command, kwargs)
@@ -195,6 +224,8 @@ class SimpleBGC:
             need_confirmation=need_confirmation,
         )
 
+
+    # ADJVAR MODULE
     def get_adj_vars(self, ids: object) -> tuple[AdjustableVariable, ...]:
         """ @brief  Requests values of adjustable variables.
 
@@ -248,12 +279,7 @@ class SimpleBGC:
     def save_adj_vars(
         self, ids: object, *, need_confirmation: bool = False
     ) -> CommandConfirmation | None:
-        """ @brief  Saves selected adjustable-variable values to EEPROM.
-
-            @code   SimpleBGC.save_adj_vars((0,1,2,))
-
-            @param  ids               - IDs of variables to persist.
-                    need_confirmation - request CMD_CONFIRM from supported firmware.
+        """ todo
         """
         return _adjvars.save_adj_vars(self, ids, need_confirmation=need_confirmation)
 
@@ -264,73 +290,220 @@ class SimpleBGC:
         """
         return _adjvars.save_all_adj_vars(self, need_confirmation=need_confirmation)
 
+    # REALTIME MODEL
     def get_angles(self) -> Angles:
-        """ @brief  Get information about the actual gimbal control state.
+        """Read the current IMU, target, and target-speed angles.
 
-            @code   angles = SimpleBGC.get_angles()
-
-                    print(f"IMU: roll={angles.imu.roll:7.2f}°, "
-                          f"pitch={angles.imu.pitch:7.2f}°, "
-                          f"yaw={angles.imu.yaw:7.2f}°")
+        Returns:
+            An :class:`Angles` object with named roll, pitch, and yaw values.
         """
         return _realtime.get_angles(self)
 
     def get_angles_ext(self) -> AnglesExt:
-        """ @brief  Get information about angles in different format.
+        """Read the extended angle representation.
 
-            @code   angles = SimpleBGC.get_angles_ext()
-
-                    roll, pitch, yaw = angles.axis_gae
-                    print(roll.imu_angle)
-                    print(roll.target_angle)
-                    print(roll.frame_cam_angle)
+        Returns:
+            An :class:`AnglesExt` object with raw per-axis values and
+            converted IMU, target, and frame-camera angle properties.
         """
         return _realtime.get_angles_ext(self)
 
     def get_realtime_data(self) -> RealtimeData3:
-        """ @brief The old name of REALTIME_DATA_3. Receives real-time data.
+        """Read ``REALTIME_DATA_3`` using its legacy method name.
 
-            @code   data = SimpleBGC.get_realtime_data()
-
-                    print(f"Battery: {data.bat_level / 100:.2f} V")
-                    print(f"System error mask: 0x{data.system_error:04X}")
+        Returns:
+            The same :class:`RealtimeData3` result as
+            :meth:`get_realtime_data_3`.
         """
         return _realtime.get_realtime_data_3(self)
 
     def get_realtime_data_3(self) -> RealtimeData3:
-        """ @brief Receives real-time data.
+        """Read the fixed ``REALTIME_DATA_3`` controller packet.
 
-            @code  data = SimpleBGC.get_realtime_data_3()
-
-                    print(f"Battery: {data.bat_level / 100:.2f} V")
-                    print(f"System error mask: 0x{data.system_error:04X}")
+        Returns:
+            A :class:`RealtimeData3` object. Most fields preserve their raw
+            protocol representation; ``bat_level`` is expressed in
+            centivolts.
         """
         return _realtime.get_realtime_data_3(self)
 
     def get_realtime_data_4(self) -> RealtimeData4:
-        """ @brief Receives extended version of real-time data.
+        """Read the extended ``REALTIME_DATA_4`` controller packet.
 
-            @code  data = SimpleBGC.get_realtime_data_4()
-
-                    print(f"IMU temperature: {data.imu_temperature} C")
-                    print(f"System state flags: 0x{data.system_state_flags:08X}")
+        Returns:
+            A :class:`RealtimeData4` object, including every
+            :class:`RealtimeData3` field.
         """
         return _realtime.get_realtime_data_4(self)
 
     def get_realtime_data_custom(self, flags: RealtimeDataCustomFlag | int) -> RealtimeDataCustom:
-        """ @brief  Requests configurable realtime data.
+        """Request a realtime packet containing selected fields.
 
-            @code   from sbgc32 import RealtimeDataCustomFlag as RTD
-                    flags = (RTD.RC_DATA | RTD.COMM_ERRORS)
+        Args:
+            flags: A combination of :class:`RealtimeDataCustomFlag` members.
 
-                    data = SimpleBGC.get_realtime_data_custom(flags=flags)
+        Returns:
+            A :class:`RealtimeDataCustom` object whose ``fields`` mapping is
+            keyed by the selected flags.
 
-                    print("RC data:", data.fields[RTD.RC_DATA])
-                    print("Communication errors:", data.fields[RTD.COMM_ERRORS])
-
-            @param  flags - required data.
+        Raises:
+            ValueError: If ``flags`` contains unsupported bits or the selected
+                protocol payload is larger than 255 bytes.
         """
         return _realtime.get_realtime_data_custom(self, flags)
+
+
+    def read_rc_inputs(self, sources: object) -> tuple[int | None, ...]:
+        """Read RC sources as normalized ``-500`` to ``500`` values.
+
+        Args:
+            sources: An iterable containing from one to 42 RC source IDs or
+                :class:`RcInputSource` values.
+
+        Returns:
+            Values in the same order as ``sources``. An inactive source is
+            represented by ``None``.
+
+        Raises:
+            TypeError: If ``sources`` is not an iterable.
+            ValueError: If the number or values of source IDs are invalid.
+        """
+        return _realtime.read_rc_inputs(self, sources)
+
+    def set_api_virtual_channels(self, values: object) -> None:
+        """ todo """
+        _control.set_api_virtual_channels(self, values)
+
+    def start_data_stream(self, config: DataStreamConfig, *, need_confirmation: bool = False) -> CommandConfirmation | None:
+        """Start a periodic controller data stream.
+
+        Args:
+            config: Command, interval, command-specific configuration, and
+                synchronization setting for the stream.
+            need_confirmation: Request ``CMD_CONFIRM`` from firmware that
+                supports confirmations.
+
+        Returns:
+            A command confirmation when requested and supported; otherwise
+            ``None``.
+        """
+        return _realtime.start_data_stream(self, config, need_confirmation=need_confirmation)
+
+    def stop_data_stream(self, config: DataStreamConfig, *, need_confirmation: bool = False) -> CommandConfirmation | None:
+        """Stop the stream described by ``config``.
+
+        Args:
+            config: The same stream configuration used to start the stream.
+            need_confirmation: Request ``CMD_CONFIRM`` from firmware that
+                supports confirmations.
+
+        Returns:
+            A command confirmation when requested and supported; otherwise
+            ``None``.
+        """
+        return _realtime.stop_data_stream(self, config, need_confirmation=need_confirmation)
+
+    def read_data_stream(self, config: DataStreamConfig, size: int | None = None,) -> bytes:
+        """Read one raw payload from a configured data stream.
+
+        Args:
+            config: The stream configuration. It determines the payload size
+                for known realtime and helper stream commands.
+            size: Required payload size for commands whose size is not known
+                to the library. Ignored for known commands.
+
+        Returns:
+            The unparsed controller payload.
+
+        Raises:
+            ValueError: If the configuration or payload size is invalid.
+        """
+        return _realtime.read_data_stream(self, config, size)
+
+    def request_debug_var_info_3(self) -> tuple[DebugVarInfo, ...]:
+        """Request the complete ``DEBUG_VARS_INFO_3`` metadata list.
+
+        Returns:
+            Index-ordered :class:`DebugVarInfo` records. Pass this complete
+            result unchanged to :meth:`request_debug_var_values_3`.
+        """
+        return _realtime.request_debug_var_info_3(self)
+
+    def format_debug_var_info_3(self, variables: Sequence[DebugVarInfo]) -> str:
+        """Format debug-variable metadata as a compact text table.
+
+        Args:
+            variables: Records returned by :meth:`request_debug_var_info_3`.
+
+        Returns:
+            A human-readable table with variable indexes, names, types, and
+            protocol flags.
+        """
+        return _realtime.format_debug_var_info_3(variables)
+
+    def print_debug_var_info_3(self, variables: Sequence[DebugVarInfo]) -> None:
+        """Print debug-variable metadata as a formatted table.
+
+        Args:
+            variables: Records returned by :meth:`request_debug_var_info_3`.
+        """
+        return _realtime.print_debug_var_info_3(variables)
+
+    def request_debug_var_values_3(self, variables: Sequence[DebugVarInfo], selected_indexes: Sequence[int] | None = None,) -> tuple[DebugVarInfo, ...]:
+        """Request current values for debug variables.
+
+        Args:
+            variables: The complete, index-ordered metadata result from
+                :meth:`request_debug_var_info_3`.
+            selected_indexes: Optional variable indexes to request. Unselected
+                records are returned unchanged.
+
+        Returns:
+            Metadata records populated with ``raw_value`` and decoded ``value``
+            for each requested variable.
+
+        Raises:
+            ValueError: If ``variables`` is not a complete, index-ordered
+                metadata list or a selected index is invalid.
+        """
+        return _realtime.request_debug_var_values_3(self, variables, selected_indexes)
+
+    def select_imu_3(self, imu_type: ImuType | int, action: SelectImuAction | int = SelectImuAction.SIMPLE_SELECT,
+        time_ms: int = 0, *, need_confirmation: bool = False,) -> CommandConfirmation | None:
+        """Select an IMU or perform an extended IMU calibration action.
+
+        Args:
+            imu_type: The IMU addressed by the command.
+            action: Selection or calibration action to perform.
+            time_ms: Action-specific duration or timeout in milliseconds.
+            need_confirmation: Request ``CMD_CONFIRM`` from firmware that
+                supports confirmations.
+
+        Returns:
+            A command confirmation when requested and supported; otherwise
+            ``None``.
+
+        Raises:
+            ValueError: If an enum value or ``time_ms`` is invalid.
+        """
+        return _realtime.select_imu_3(self, imu_type, action, time_ms, need_confirmation=need_confirmation,)
+
+    def get_control_quat_status(self, flags: ControlQuatStatusFlag | int,) -> ControlQuatStatus:
+        """Read selected quaternion-control status fields (firmware 2.73+).
+
+        Args:
+            flags: Combination of :class:`ControlQuatStatusFlag` members to
+                include in the controller response.
+
+        Returns:
+            A :class:`ControlQuatStatus` object. Fields not requested by
+            ``flags`` are ``None``; speed values retain raw protocol units.
+
+        Raises:
+            ValueError: If no fields or unsupported status bits are selected.
+        """
+        return _realtime.get_control_quat_status(self, flags)
+
 
     def motors_on(self) -> None:
         """ @brief  Turns on gimbal motors.
@@ -338,6 +511,68 @@ class SimpleBGC:
             @code   SimpleBGC.motors_on()
          """
         _service.motors_on(self)
+
+    def tune_auto_pid(
+        self, config: AutoPidConfig, *, need_confirmation: bool = False,
+    ) -> CommandConfirmation | None:
+        """Start legacy automatic PID tuning (firmware before 2.73)."""
+        return _service.tune_auto_pid(self, config, need_confirmation=need_confirmation)
+
+    def break_auto_pid(self, *, need_confirmation: bool = False) -> CommandConfirmation | None:
+        """Stop legacy automatic PID tuning."""
+        return _service.break_auto_pid(self, need_confirmation=need_confirmation)
+
+    def tune_auto_pid2(
+        self, config: AutoPid2Config, *, need_confirmation: bool = False,
+    ) -> CommandConfirmation | None:
+        """Send an automatic PID v2 request (firmware 2.73+)."""
+        return _service.tune_auto_pid2(self, config, need_confirmation=need_confirmation)
+
+    def read_auto_pid_state(self) -> AutoPidState:
+        """Read the latest automatic PID progress packet."""
+        return _service.read_auto_pid_state(self)
+
+    def synchronize_motors(
+        self, config: SyncMotorsConfig, *, need_confirmation: bool = False,
+    ) -> CommandConfirmation | None:
+        """Synchronize parallel motors. This command can move the gimbal."""
+        return _service.synchronize_motors(self, config, need_confirmation=need_confirmation)
+
+    def request_motor_state(self, motor_id: int, data_set: int, result_size: int) -> bytes:
+        """Request raw EXT_MOTORS_STATE data for one motor."""
+        return _service.request_motor_state(self, motor_id, data_set, result_size)
+
+    def read_motor_state(self, result_size: int) -> bytes:
+        """Read a queued raw EXT_MOTORS_STATE payload."""
+        return _service.read_motor_state(self, result_size)
+
+    def enter_boot_mode(
+        self, *, extended: bool = True, need_confirmation: bool = False, delay_ms: int = 0,
+    ) -> None:
+        """Enter the bootloader; no further SerialAPI communication is allowed afterwards."""
+        _service.enter_boot_mode(
+            self, extended=extended, need_confirmation=need_confirmation, delay_ms=delay_ms,
+        )
+
+    def read_state_vars(self) -> StateVars:
+        """Read persistent maintenance and cumulative state counters."""
+        return _service.read_state_vars(self)
+
+    def write_state_vars(
+        self, state: StateVars, *, need_confirmation: bool = False,
+    ) -> CommandConfirmation | None:
+        """Write persistent state counters; this changes controller memory."""
+        return _service.write_state_vars(self, state, need_confirmation=need_confirmation)
+
+    def set_debug_port(
+        self, action: int, filter: int = 0, *, need_confirmation: bool = False,
+    ) -> CommandConfirmation | None:
+        """Start or stop streaming controller packets to the debug port."""
+        return _service.set_debug_port(self, action, filter, need_confirmation=need_confirmation)
+
+    def read_debug_port(self) -> DebugPortPacket:
+        """Read one queued debug-port packet into a 255-byte payload buffer."""
+        return _service.read_debug_port(self)
 
     def motors_off(self, mode: MotorsOffMode = MotorsOffMode.SAFE_STOP) -> None:
         """ @brief  Turns off gimbal motors with the selected stop mode.
@@ -431,7 +666,7 @@ class SimpleBGC:
         """ @brief  Reads version and board information
 
              @code   board = SimpleBGC.get_board_info()
-                     print(f"Board: {board.board_version}")
+                     print(f"Board: {board.board_ver}")
          """
         return _service.get_board_info(self)
 

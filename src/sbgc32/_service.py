@@ -2,11 +2,244 @@
 
 from __future__ import annotations
 
+import ctypes
 from time import sleep
 
 from ._control import make_confirmation, validate_uint
+from ._serial_api_library import NativeAutoPid, NativeAutoPid2, NativeAutoPid2Axis, NativeStateVars, NativeSyncMotors
 from .commands import MenuCommands
-from .types import BeeperMode, BoardInfo, BoardInfo3, CommandConfirmation, MotorsOffMode, ScriptDebugInfo
+from .types import (
+    AutoPid2Axis,
+    AutoPid2Config,
+    AutoPidAxisState,
+    AutoPidConfig,
+    AutoPidState,
+    BeeperMode,
+    BoardInfo,
+    BoardInfo3,
+    CommandConfirmation,
+    DebugPortPacket,
+    MotorsOffMode,
+    ScriptDebugInfo,
+    StateVars,
+    SyncMotorsConfig,
+)
+
+
+def _auto_pid_config(config: AutoPidConfig) -> NativeAutoPid:
+    if not isinstance(config, AutoPidConfig):
+        raise TypeError("config must be an AutoPidConfig")
+    return NativeAutoPid(
+        profile_id=validate_uint(config.profile_id, "profile_id", 0xFF),
+        config_flags=validate_uint(int(config.config_flags), "config_flags", 0xFF),
+        gain_vs_stability=validate_uint(config.gain_vs_stability, "gain_vs_stability", 0xFF),
+        momentum=validate_uint(config.momentum, "momentum", 0xFF),
+        action=validate_uint(config.action, "action", 0xFF),
+    )
+
+
+def _auto_pid2_config(config: AutoPid2Config) -> NativeAutoPid2:
+    if not isinstance(config, AutoPid2Config):
+        raise TypeError("config must be an AutoPid2Config")
+    if len(config.axes) != 3 or any(not isinstance(axis, AutoPid2Axis) for axis in config.axes):
+        raise TypeError("axes must contain exactly three AutoPid2Axis records")
+    if len(config.multi_position_angles) != 4:
+        raise ValueError("multi_position_angles must contain exactly four values")
+    if any(type(value) is not int or not -128 <= value <= 127 for value in config.multi_position_angles):
+        raise ValueError("each multi_position_angles value must be an integer in range -128..127")
+    native_axes = (NativeAutoPid2Axis * 3)(*(
+        NativeAutoPid2Axis(
+            axis_flags=validate_uint(int(axis.axis_flags), "axis_flags", 0xFF),
+            gain=validate_uint(axis.gain, "gain", 0xFF),
+            stimulus_gain=validate_uint(axis.stimulus_gain, "stimulus_gain", 0xFFFF),
+            effective_frequency=validate_uint(axis.effective_frequency, "effective_frequency", 0xFF),
+            problem_frequency=validate_uint(axis.problem_frequency, "problem_frequency", 0xFF),
+            problem_margin=validate_uint(axis.problem_margin, "problem_margin", 0xFF),
+        ) for axis in config.axes
+    ))
+    return NativeAutoPid2(
+        action=validate_uint(int(config.action), "action", 0xFF),
+        command_flags=validate_uint(config.command_flags, "command_flags", 0xFFFF),
+        config_version=validate_uint(config.config_version, "config_version", 0xFF),
+        axis=native_axes,
+        general_flags=validate_uint(config.general_flags, "general_flags", 0xFFFF),
+        test_frequency_from=validate_uint(config.test_frequency_from, "test_frequency_from", 0xFF),
+        test_frequency_to=validate_uint(config.test_frequency_to, "test_frequency_to", 0xFF),
+        multi_position_flags=validate_uint(config.multi_position_flags, "multi_position_flags", 0xFF),
+        multi_position_angle=(ctypes.c_int8 * 4)(*config.multi_position_angles),
+    )
+
+
+def tune_auto_pid(
+    self, config: AutoPidConfig, *, need_confirmation: bool = False,
+) -> CommandConfirmation | None:
+    """Start legacy automatic PID tuning (firmware before 2.73)."""
+    self._ensure_open()
+    if type(need_confirmation) is not bool:
+        raise TypeError("need_confirmation must be bool")
+    return make_confirmation(self._native.tune_auto_pid(
+        self._device, _auto_pid_config(config), need_confirmation=need_confirmation,
+    ))
+
+
+def break_auto_pid(self, *, need_confirmation: bool = False) -> CommandConfirmation | None:
+    """Stop the currently running legacy automatic PID tuning."""
+    self._ensure_open()
+    if type(need_confirmation) is not bool:
+        raise TypeError("need_confirmation must be bool")
+    return make_confirmation(self._native.break_auto_pid(
+        self._device, need_confirmation=need_confirmation,
+    ))
+
+
+def tune_auto_pid2(
+    self, config: AutoPid2Config, *, need_confirmation: bool = False,
+) -> CommandConfirmation | None:
+    """Send an automatic PID v2 request (firmware 2.73+)."""
+    self._ensure_open()
+    if type(need_confirmation) is not bool:
+        raise TypeError("need_confirmation must be bool")
+    return make_confirmation(self._native.tune_auto_pid2(
+        self._device, _auto_pid2_config(config), need_confirmation=need_confirmation,
+    ))
+
+
+def read_auto_pid_state(self) -> AutoPidState:
+    """Read the latest unsolicited CMD_AUTO_PID progress packet."""
+    self._ensure_open()
+    result = self._native.read_auto_pid_state(self._device)
+    return AutoPidState(
+        p=tuple(result.p),
+        i=tuple(result.i),
+        d=tuple(result.d),
+        lpf_frequency=tuple(result.lpf_frequency),
+        iteration_count=result.iteration_count,
+        axes=tuple(AutoPidAxisState(axis.tracking_error) for axis in result.axis),
+    )
+
+
+def synchronize_motors(
+    self, config: SyncMotorsConfig, *, need_confirmation: bool = False,
+) -> CommandConfirmation | None:
+    """Apply a power pulse to one motor to align parallel motors mechanically."""
+    self._ensure_open()
+    if not isinstance(config, SyncMotorsConfig):
+        raise TypeError("config must be a SyncMotorsConfig")
+    if type(need_confirmation) is not bool:
+        raise TypeError("need_confirmation must be bool")
+    native_config = NativeSyncMotors(
+        axis=validate_uint(int(config.axis), "axis", 2),
+        power=validate_uint(config.power, "power", 0xFF),
+        time_ms=validate_uint(config.time_ms, "time_ms", 0xFFFF),
+        angle=validate_uint(config.angle, "angle", 0xFFFF),
+    )
+    return make_confirmation(self._native.synchronize_motors(
+        self._device, native_config, need_confirmation=need_confirmation,
+    ))
+
+
+def request_motor_state(self, motor_id: int, data_set: int, result_size: int) -> bytes:
+    """Request a raw CMD_EXT_MOTORS_STATE payload for one motor.
+
+    The first four returned bytes are the little-endian ``data_set`` mask.
+    The exact trailing layout is defined by that mask in SerialAPI.
+    """
+    self._ensure_open()
+    return self._native.request_motor_state(
+        self._device,
+        validate_uint(motor_id, "motor_id", 0xFF),
+        validate_uint(data_set, "data_set", 0xFFFFFFFF),
+        validate_uint(result_size, "result_size", 0xFF),
+    )
+
+
+def read_motor_state(self, result_size: int) -> bytes:
+    """Read a queued raw CMD_EXT_MOTORS_STATE payload."""
+    self._ensure_open()
+    return self._native.read_motor_state(
+        self._device, validate_uint(result_size, "result_size", 0xFF),
+    )
+
+
+def enter_boot_mode(
+    self, *, extended: bool = True, need_confirmation: bool = False, delay_ms: int = 0,
+) -> None:
+    """Enter the bootloader. Do not send more SerialAPI commands afterwards."""
+    self._ensure_open()
+    if type(extended) is not bool or type(need_confirmation) is not bool:
+        raise TypeError("extended and need_confirmation must be bool")
+    self._native.set_boot_mode(
+        self._device, extended=extended, need_confirmation=need_confirmation,
+        delay_ms=validate_uint(delay_ms, "delay_ms", 0xFFFF),
+    )
+
+
+def _state_vars_from_native(result: NativeStateVars) -> StateVars:
+    return StateVars(
+        step_signal_vars=bytes(result.step_signal_vars), sub_error=result.sub_error,
+        max_acc=result.max_acc, work_time=result.work_time, startup_count=result.startup_count,
+        max_current=result.max_current, imu_temp_min=result.imu_temp_min,
+        imu_temp_max=result.imu_temp_max, mcu_temp_min=result.mcu_temp_min,
+        mcu_temp_max=result.mcu_temp_max, shock_count=bytes(result.shock_count),
+        energy_time=result.energy_time, energy=result.energy,
+        avg_current_time=result.avg_current_time, avg_current=result.avg_current,
+        reserved=bytes(result.reserved),
+    )
+
+
+def _state_vars_to_native(value: StateVars) -> NativeStateVars:
+    if not isinstance(value, StateVars):
+        raise TypeError("state must be a StateVars")
+    if len(value.step_signal_vars) != 6 or len(value.shock_count) != 4 or len(value.reserved) != 152:
+        raise ValueError("StateVars byte fields must have sizes 6, 4, and 152")
+    return NativeStateVars(
+        step_signal_vars=(ctypes.c_uint8 * 6).from_buffer_copy(value.step_signal_vars),
+        sub_error=validate_uint(value.sub_error, "sub_error", 0xFF),
+        max_acc=validate_uint(value.max_acc, "max_acc", 0xFF),
+        work_time=validate_uint(value.work_time, "work_time", 0xFFFFFFFF),
+        startup_count=validate_uint(value.startup_count, "startup_count", 0xFFFF),
+        max_current=validate_uint(value.max_current, "max_current", 0xFFFF),
+        imu_temp_min=validate_uint(value.imu_temp_min, "imu_temp_min", 0xFF),
+        imu_temp_max=validate_uint(value.imu_temp_max, "imu_temp_max", 0xFF),
+        mcu_temp_min=validate_uint(value.mcu_temp_min, "mcu_temp_min", 0xFF),
+        mcu_temp_max=validate_uint(value.mcu_temp_max, "mcu_temp_max", 0xFF),
+        shock_count=(ctypes.c_uint8 * 4).from_buffer_copy(value.shock_count),
+        energy_time=validate_uint(value.energy_time, "energy_time", 0xFFFFFFFF),
+        energy=float(value.energy), avg_current_time=validate_uint(value.avg_current_time, "avg_current_time", 0xFFFFFFFF),
+        avg_current=float(value.avg_current), reserved=(ctypes.c_uint8 * 152).from_buffer_copy(value.reserved),
+    )
+
+
+def read_state_vars(self) -> StateVars:
+    self._ensure_open()
+    return _state_vars_from_native(self._native.read_state_vars(self._device))
+
+
+def write_state_vars(self, state: StateVars, *, need_confirmation: bool = False) -> CommandConfirmation | None:
+    self._ensure_open()
+    if type(need_confirmation) is not bool:
+        raise TypeError("need_confirmation must be bool")
+    return make_confirmation(self._native.write_state_vars(
+        self._device, _state_vars_to_native(state), need_confirmation=need_confirmation,
+    ))
+
+
+def set_debug_port(
+    self, action: int, filter: int = 0, *, need_confirmation: bool = False,
+) -> CommandConfirmation | None:
+    self._ensure_open()
+    if type(need_confirmation) is not bool:
+        raise TypeError("need_confirmation must be bool")
+    return make_confirmation(self._native.set_debug_port(
+        self._device, validate_uint(action, "action", 1),
+        validate_uint(filter, "filter", 0xFFFFFFFF), need_confirmation=need_confirmation,
+    ))
+
+
+def read_debug_port(self) -> DebugPortPacket:
+    self._ensure_open()
+    time_ms, port_and_direction, command_id, payload = self._native.read_debug_port(self._device)
+    return DebugPortPacket(time_ms, port_and_direction, command_id, payload)
 
 
 def motors_on(self) -> None:

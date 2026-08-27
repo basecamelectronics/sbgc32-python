@@ -1,0 +1,17 @@
+{
+	"version": "0.2.1",
+	"defaults": {},
+	"configurations": [
+		{
+			"type": "python",
+			"interpreter": "C:\\Basecam\\python_serialAPI\\.venv\\Scripts\\python.exe",
+			"project": "examples\\Test.py",
+			"name": "Test — Python + C",
+			"workingDirectory": "C:\\Basecam\\python_serialAPI",
+			"env": {
+				"PYTHONPATH": "C:\\Basecam\\python_serialAPI\\src"
+			},
+			"nativeDebug": true
+		}
+	]
+}

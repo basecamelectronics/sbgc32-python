@@ -1411,7 +1411,7 @@ static void PostRequestDebugVarValue3 (sbgcGeneral_t *gSBGC)
 
 	for ( ; payloadSize; varNum++)
 	{
-		if ((gSBGC->_api->baseFirmwareVersion > 2720) && (debugVars3->mask != NULL))
+		if ((gSBGC->_api->baseFirmwareVersion >= 2720) && (debugVars3->mask != NULL))
 			payloadSize -= sizeof(ui32);  // mask
 
 		payloadSize -= gSBGC->_api->typeToSize(debugVars3->debugVar3_Info[varNum].type);
@@ -1554,7 +1554,7 @@ sbgcCommandStatus_t SBGC32_SelectIMU_3 (sbgcGeneral_t *gSBGC, sbgcIMU_Type_t IMU
  */
 static void PostControlQuatStatus (sbgcGeneral_t *gSBGC)
 {
-	ui8 bytesSkip = sizeof(ui32);
+	ui8 bytesSkip = sizeof(ui16);
 
 	if (curCmd_->_destinationSize < (curCmd_->_payloadSize - bytesSkip))
 		SerialAPI_FatalErrorHandler();

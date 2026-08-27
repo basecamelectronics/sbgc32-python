@@ -35,6 +35,9 @@ class _PySerialTransport:
         self._port = port
         self._baudrate = baudrate
         self._buffer: deque[int] = deque()
+        self._debug_packets: deque[tuple[int, int, int, bytes]] = deque()
+        self._debug_scan = bytearray()
+        self._debug_capture_suppressed = False
         self._buffer_lock = Lock()
         self._open()
 
@@ -56,6 +59,60 @@ class _PySerialTransport:
             if data:
                 with self._buffer_lock:
                     self._buffer.extend(data)
+                    if not self._debug_capture_suppressed:
+                        self._capture_debug_packets(data)
+
+    def _capture_debug_packets(self, data: bytes) -> None:
+        """Copy unsolicited P2 CMD_SET_DEBUG_PORT packets without consuming RX."""
+        for value in data:
+            if not self._debug_scan:
+                if value == 0x24:  # '$', P2 frame start
+                    self._debug_scan.append(value)
+                continue
+
+            self._debug_scan.append(value)
+            if len(self._debug_scan) == 4:
+                if (self._debug_scan[1] + self._debug_scan[2]) & 0xFF != self._debug_scan[3]:
+                    self._debug_scan.clear()
+                    if value == 0x24:
+                        self._debug_scan.append(value)
+                    continue
+
+            if len(self._debug_scan) < 4:
+                continue
+
+            frame_size = self._debug_scan[2] + 6
+            if len(self._debug_scan) < frame_size:
+                continue
+            if len(self._debug_scan) > frame_size:
+                self._debug_scan.clear()
+                continue
+
+            frame = self._debug_scan
+            payload_size = frame[2]
+            payload = frame[4:4 + payload_size]
+            received_crc = frame[payload_size + 4] | (frame[payload_size + 5] << 8)
+            if frame[1] == 249 and payload_size >= 4 and self._crc16(frame[1:4 + payload_size]) == received_crc:
+                packet = (
+                    payload[0] | (payload[1] << 8), payload[2], payload[3],
+                    bytes(payload[4:]),
+                )
+                if len(self._debug_packets) == 8:
+                    self._debug_packets.popleft()
+                self._debug_packets.append(packet)
+            self._debug_scan.clear()
+
+    @staticmethod
+    def _crc16(data: bytes | bytearray) -> int:
+        result = 0
+        for value in data:
+            for bit in range(8):
+                data_bit = 1 if value & (1 << bit) else 0
+                crc_bit = result >> 15
+                result = (result << 1) & 0xFFFF
+                if data_bit != crc_bit:
+                    result ^= 0x8005
+        return result
 
     def write(self, data: bytes) -> bool:
         try:
@@ -74,10 +131,20 @@ class _PySerialTransport:
         with self._buffer_lock:
             return min(len(self._buffer), 0xFFFE)
 
+    def pop_debug_packet(self) -> tuple[int, int, int, bytes] | None:
+        with self._buffer_lock:
+            return self._debug_packets.popleft() if self._debug_packets else None
+
+    def suppress_debug_capture(self, suppressed: bool) -> None:
+        with self._buffer_lock:
+            self._debug_capture_suppressed = suppressed
+
     def recover(self) -> None:
         self.close()
         with self._buffer_lock:
             self._buffer.clear()
+            self._debug_packets.clear()
+            self._debug_scan.clear()
         self._open()
 
     def close(self) -> None:
@@ -182,6 +249,25 @@ class PySerialLibrary(SerialApiLibrary):
         except KeyError as error:
             raise NativeError("Cannot recover a closed SimpleBGC connection.") from error
         super().recover(device)
+
+    def read_debug_port(self, device: int) -> tuple[int, int, int, bytes]:
+        try:
+            transport = self._transports[device]
+        except KeyError as error:
+            raise NativeError("Cannot read Debug Port on a closed SimpleBGC connection.") from error
+
+        packet = transport.pop_debug_packet()
+        if packet is not None:
+            time_ms, port_and_direction, command_id, payload = packet
+            return time_ms, port_and_direction, command_id, payload.ljust(255, b"\0")
+
+        # A direct SBGC32_ReadDebugPort call will receive this record itself.
+        # Avoid keeping a duplicate in the Python side queue.
+        transport.suppress_debug_capture(True)
+        try:
+            return super().read_debug_port(device)
+        finally:
+            transport.suppress_debug_capture(False)
 
 
 class PySerialBackend:

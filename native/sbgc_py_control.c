@@ -2,22 +2,21 @@
 
 #include <string.h>
 
-/* Do not retransmit a physical movement while waiting for confirmation. */
-#define SBGC_PY_CONTROL_CONFIRM_ATTEMPTS 3
-
 sbgc_py_status_t sbgc_py_control (
     sbgc_py_device_t *device,
-    const uint8_t modes[3],
-    const int16_t speeds[3],
-    const int16_t angles[3],
-    uint8_t need_confirmation,
+    const ui8 modes[3],
+    const i16 speeds[3],
+    const i16 angles[3],
+    ui8 need_confirmation,
     sbgc_py_confirmation_t *confirmation
 )
 {
 #if (SBGC_CONTROL_MODULE)
+
+
     sbgcControl_t native_control = { 0 };
     sbgcCommandStatus_t status;
-    uint8_t axis;
+    ui8 axis;
 
     if (device == NULL || modes == NULL || speeds == NULL || angles == NULL)
         return SBGC_PY_INVALID_ARGUMENT;
@@ -44,7 +43,7 @@ sbgc_py_status_t sbgc_py_control (
 #if (SBGC_NEED_CONFIRM_CMD)
     {
         sbgcConfirm_t native_confirmation = { 0 };
-        uint8_t attempt;
+        ui8 attempt;
 
         if (confirmation == NULL)
             return SBGC_PY_INVALID_ARGUMENT;
@@ -62,7 +61,7 @@ sbgc_py_status_t sbgc_py_control (
             return SBGC_PY_COMMUNICATION_ERROR;
 
         confirmation->command_id = native_confirmation.commandID;
-        confirmation->status = (uint8_t)native_confirmation.status;
+        confirmation->status = (ui8)native_confirmation.status;
         confirmation->command_data = native_confirmation.cmdData;
         confirmation->error_code = native_confirmation.errorCode;
         memcpy(confirmation->error_data, native_confirmation.errorData, sizeof(confirmation->error_data));
@@ -85,17 +84,17 @@ sbgc_py_status_t sbgc_py_control (
 #endif
 }
 
-sbgc_py_status_t sbgc_py_control_config (
-    sbgc_py_device_t *device,
-    const sbgc_py_control_config_t *config,
-    uint8_t need_confirmation,
-    sbgc_py_confirmation_t *confirmation
+sbgc_py_status_t sbgc_py_control_config 
+(
+    sbgc_py_device_t *device, const sbgc_py_control_config_t *config,
+    ui8 need_confirmation, sbgc_py_confirmation_t *confirmation
 )
 {
 #if (SBGC_CONTROL_MODULE)
+
     sbgcControlConfig_t native_config = { 0 };
     sbgcCommandStatus_t status;
-    uint8_t axis;
+    ui8 axis;
 
     if (device == NULL || config == NULL)
         return SBGC_PY_INVALID_ARGUMENT;
@@ -138,7 +137,7 @@ sbgc_py_status_t sbgc_py_control_config (
             return SBGC_PY_COMMUNICATION_ERROR;
 
         confirmation->command_id = native_confirmation.commandID;
-        confirmation->status = (uint8_t)native_confirmation.status;
+        confirmation->status = (ui8)native_confirmation.status;
         confirmation->command_data = native_confirmation.cmdData;
         confirmation->error_code = native_confirmation.errorCode;
 
@@ -162,6 +161,36 @@ sbgc_py_status_t sbgc_py_control_config (
     (void)config;
     (void)need_confirmation;
     (void)confirmation;
+    return SBGC_PY_MODULE_DISABLED;
+#endif
+}
+
+SBGC_PY_API sbgc_py_status_t sbgc_py_set_api_virtual_channels (sbgc_py_device_t* device, const i16* API_virt_ch, ui8 ch_quan)
+{
+#if (SBGC_CONTROL_MODULE)
+
+    sbgcCommandStatus_t status;
+
+    if (device == NULL || API_virt_ch == NULL || !(ch_quan >= 1 && ch_quan <= SBGC_VIRTUAL_CHANNELS_NUM))
+        return SBGC_PY_INVALID_ARGUMENT;
+
+    if (!device->connected)
+        return SBGC_PY_NOT_CONNECTED;
+
+    if (current_device != device)
+        return SBGC_PY_ERROR;
+
+    status = SBGC32_SetAPI_VirtChControl(&device->serial_api, API_virt_ch, ch_quan);
+
+    if (status != sbgcCOMMAND_OK || device->serial_api._lastSerialCommandStatus != serialAPI_TX_RX_OK)
+        return SBGC_PY_COMMUNICATION_ERROR;
+
+    return SBGC_PY_OK;
+
+#else
+    (void)device;
+    (void)API_virt_ch;
+    (void)ch_quan;
     return SBGC_PY_MODULE_DISABLED;
 #endif
 }

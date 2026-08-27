@@ -22,6 +22,167 @@ class BeeperMode(IntFlag):
     CUSTOM_MELODY = 1 << 15
 
 
+class AutoPidFlag(IntFlag):
+    """Configuration bits accepted by the legacy CMD_AUTO_PID command."""
+
+    STOP = 0
+    ROLL = 1 << 0
+    PITCH = 1 << 1
+    YAW = 1 << 2
+    SEND_GUI = 1 << 3
+    KEEP_CURRENT = 1 << 4
+    TUNE_LPF_FREQUENCY = 1 << 5
+    ALL_PROFILES = 1 << 6
+
+
+class AutoPid2Action(IntEnum):
+    START = 1
+    START_SAVE = 2
+    SAVE = 3
+    STOP = 5
+    READ = 6
+
+
+class AutoPid2AxisFlag(IntFlag):
+    ENABLED = 1 << 0
+    TUNE_LPF = 1 << 1
+
+
+class AutoPid2GeneralFlag(IntFlag):
+    START_FROM_CURRENT_VALUES = 1 << 0
+    SAVE_RESULT_TO_ALL_PROFILES = 1 << 1
+    TUNE_GAIN_ONLY = 1 << 2
+    AUTOSAVE = 1 << 4
+    RUN_AT_SYSTEM_START_TUNE_ALL = 1 << 14
+    RUN_AT_SYSTEM_START_TUNE_GAIN = 1 << 15
+
+
+class SyncMotorAxis(IntEnum):
+    ROLL = 0
+    PITCH = 1
+    YAW = 2
+
+
+class DebugPortAction(IntEnum):
+    STOP = 0
+    START = 1
+
+
+class DebugPortFilter(IntFlag):
+    """Packet classes excluded from Debug Port output (zero forwards all)."""
+
+    REALTIME_DATA_3             = 1 << 0
+    REALTIME_DATA_4             = 1 << 1
+    REALTIME_DATA_CUSTOM        = 1 << 2
+    DEBUG_VARS_3                = 1 << 3
+    MAVLINK_DEBUG               = 1 << 4
+    GET_ANGLES                  = 1 << 5
+    GET_ANGLES_EXT              = 1 << 6
+    BODE_TEST_DATA              = 1 << 7
+    HELPER_DATA                 = 1 << 8
+    AHRS_HELPER                 = 1 << 9
+    GYRO_CORRECTION             = 1 << 10
+    CONTROL                     = 1 << 11
+    SET_ADJ_VARS                = 1 << 12
+    API_VIRTUAL_CHANNEL_CONTROL = 1 << 13
+    API_VIRTUAL_CHANNEL_HIGH_RES = 1 << 14
+
+
+@dataclass(frozen=True, slots=True)
+class StateVars:
+    """Persistent maintenance counters returned by CMD_READ_STATE_VARS."""
+
+    step_signal_vars: bytes
+    sub_error: int
+    max_acc: int
+    work_time: int
+    startup_count: int
+    max_current: int
+    imu_temp_min: int
+    imu_temp_max: int
+    mcu_temp_min: int
+    mcu_temp_max: int
+    shock_count: bytes
+    energy_time: int
+    energy: float
+    avg_current_time: int
+    avg_current: float
+    reserved: bytes = b"\x00" * 152
+
+
+@dataclass(frozen=True, slots=True)
+class DebugPortPacket:
+    time_ms: int
+    port_and_direction: int
+    command_id: int
+    payload_buffer: bytes
+
+
+@dataclass(frozen=True, slots=True)
+class AutoPidConfig:
+    """Legacy automatic PID tuning request (firmware before 2.73)."""
+
+    profile_id: int = 0
+    config_flags: int = AutoPidFlag.STOP
+    gain_vs_stability: int = 0
+    momentum: int = 0
+    action: int = 0
+
+
+@dataclass(frozen=True, slots=True)
+class AutoPid2Axis:
+    """One axis configuration for CMD_AUTO_PID2."""
+
+    axis_flags: int = 0
+    gain: int = 0
+    stimulus_gain: int = 0
+    effective_frequency: int = 0
+    problem_frequency: int = 0
+    problem_margin: int = 0
+
+
+@dataclass(frozen=True, slots=True)
+class AutoPid2Config:
+    """Automatic PID v2 request (firmware 2.73+)."""
+
+    action: AutoPid2Action | int
+    command_flags: int = 0
+    config_version: int = 1
+    axes: tuple[AutoPid2Axis, AutoPid2Axis, AutoPid2Axis] = (
+        AutoPid2Axis(), AutoPid2Axis(), AutoPid2Axis(),
+    )
+    general_flags: int = 0
+    test_frequency_from: int = 0
+    test_frequency_to: int = 0
+    multi_position_flags: int = 0
+    multi_position_angles: tuple[int, int, int, int] = (0, 0, 0, 0)
+
+
+@dataclass(frozen=True, slots=True)
+class AutoPidAxisState:
+    tracking_error: float
+
+
+@dataclass(frozen=True, slots=True)
+class AutoPidState:
+    p: tuple[int, int, int]
+    i: tuple[int, int, int]
+    d: tuple[int, int, int]
+    lpf_frequency: tuple[int, int, int]
+    iteration_count: int
+    axes: tuple[AutoPidAxisState, AutoPidAxisState, AutoPidAxisState]
+
+
+@dataclass(frozen=True, slots=True)
+class SyncMotorsConfig:
+    """Power pulse used by CMD_SYNC_MOTORS; it moves the selected motor."""
+
+    axis: SyncMotorAxis | int
+    power: int
+    time_ms: int
+    angle: int = 0
+
+
 class ControlMode(IntEnum):
     """ Low four bits of one CMD_CONTROL axis mode byte """
 
@@ -89,6 +250,151 @@ class ConfirmationStatus(IntEnum):
     RECEIVED = 1
     ERROR = 2
 
+
+class RcInputSource (IntEnum):
+    NO_SIGNAL                   = 0
+    ROLL                        = 1
+    PITCH                       = 2
+    EXTERNAL_FC_ROLL            = 3
+    EXTERNAL_FC_PITCH           = 4
+    YAW                         = 5
+
+    ADC_1                       = 0x21
+    ADC_2                       = 0x22
+    ADC_3                       = 0x23
+    ADC_4                       = 0x24
+
+    SERIAL_VIRTUAL_1            = 0x41
+    API_VIRTUAL_1               = 0x81
+    API_VIRTUAL_2               = 0x82
+    API_VIRTUAL_3               = 0x83
+    API_VIRTUAL_4               = 0x84
+    API_VIRTUAL_5               = 0x85
+    API_VIRTUAL_6               = 0x86
+    API_VIRTUAL_7               = 0x87
+    API_VIRTUAL_8               = 0x88
+    API_VIRTUAL_9               = 0x89
+    API_VIRTUAL_10              = 0x8A
+    API_VIRTUAL_11              = 0x8B
+    API_VIRTUAL_12              = 0x8C
+    API_VIRTUAL_13              = 0x8D
+    API_VIRTUAL_14              = 0x8E
+    API_VIRTUAL_15              = 0x8F
+    API_VIRTUAL_16              = 0x90
+    API_VIRTUAL_17              = 0x91
+    API_VIRTUAL_18              = 0x92
+    API_VIRTUAL_19              = 0x93
+    API_VIRTUAL_20              = 0x94
+    API_VIRTUAL_21              = 0x95
+    API_VIRTUAL_22              = 0x96
+    API_VIRTUAL_23              = 0x97
+    API_VIRTUAL_24              = 0x98
+    API_VIRTUAL_25              = 0x99
+    API_VIRTUAL_26              = 0x9A
+    API_VIRTUAL_27              = 0x9B
+    API_VIRTUAL_28              = 0x9C
+    API_VIRTUAL_29              = 0x9D
+    API_VIRTUAL_30              = 0x9E
+    API_VIRTUAL_31              = 0x9F
+    API_VIRTUAL_32              = 0xA0
+
+    STEP_SIGNAL_1               = 0xA1
+
+
+@dataclass(frozen=True, slots=True)
+class DebugVarInfo:
+    index: int
+    name: str
+    raw_type: int
+    raw_value: int | None = None
+    value: int | float | None = None
+
+
+class ImuType(IntEnum):
+    """IMU selected by CMD_SELECT_IMU_3."""
+
+    CURRENTLY_ACTIVE = 0
+    MAIN = 1
+    FRAME = 2
+
+
+class SelectImuAction(IntEnum):
+    """Action requested by CMD_SELECT_IMU_3."""
+
+    SIMPLE_SELECT = 0
+    REGULAR_CALIBRATION = 1
+    RESET_ALL_CALIBRATION_AND_RESTART = 2
+    TEMPERATURE_CALIBRATION = 3
+    ENABLE_TEMPERATURE_CALIBRATION_DATA_IF_PRESENT = 4
+    DISABLE_TEMPERATURE_CALIBRATION_DATA = 5
+    RESTORE_FACTORY_CALIBRATION = 6
+    COPY_CALIBRATION_FROM_MAIN_EEPROM = 7
+
+
+class ControlQuatMode(IntEnum):
+    DISABLED = 0
+    SPEED = 1
+    ATTITUDE = 2
+    SPEED_ATTITUDE = 5
+    SPEED_LIMITED = 9
+
+
+class ControlQuatStatusFlag(IntFlag):
+    MODE_AND_FLAGS = 1 << 0
+    TARGET_ATTITUDE = 1 << 1
+    SETPOINT_ATTITUDE = 1 << 2
+    ACTUAL_ATTITUDE = 1 << 3
+    TARGET_SPEED = 1 << 4
+    SETPOINT_SPEED = 1 << 5
+    ACTUAL_SPEED = 1 << 6
+    TARGET_ATTITUDE_PACKED = 1 << 7
+    SETPOINT_ATTITUDE_PACKED = 1 << 8
+    ACTUAL_ATTITUDE_PACKED = 1 << 9
+
+
+@dataclass(frozen=True, slots=True)
+class ControlQuatStatus:
+    """Selected CMD_CONTROL_QUAT_STATUS fields.
+
+    Speed fields are raw signed protocol units; their scale depends on the
+    controller firmware's quaternion-control implementation.
+    """
+
+    requested_fields: ControlQuatStatusFlag
+    mode: ControlQuatMode | int | None = None
+    control_flags: int | None = None
+    target_attitude: tuple[float, float, float, float] | None = None
+    setpoint_attitude: tuple[float, float, float, float] | None = None
+    actual_attitude: tuple[float, float, float, float] | None = None
+    target_speed_raw: tuple[int, int, int] | None = None
+    setpoint_speed_raw: tuple[int, int, int] | None = None
+    actual_speed_raw: tuple[int, int, int] | None = None
+    target_attitude_packed: bytes | None = None
+    setpoint_attitude_packed: bytes | None = None
+    actual_attitude_packed: bytes | None = None
+    raw_payload: bytes = b""
+    raw_payload: bytes = b""
+
+
+class DataStreamCommand(IntEnum):
+    REALTIME_DATA_3 = 23
+    REALTIME_DATA_4 = 25
+    REALTIME_DATA_CUSTOM = 88
+    AHRS_HELPER = 56
+
+    EVENT = 102
+
+    CAN_DRIVER_TELEMETRY = 127
+    EXT_MOTORS_STATE = 131
+
+
+@dataclass(frozen=True, slots=True)
+class DataStreamConfig:
+    command: DataStreamCommand
+    interval_ms: int
+    config: bytes = b""
+    sync_to_data: bool = False
+    # and 9 reserved bytes
 
 @dataclass(frozen=True, slots=True)
 class CommandConfirmation:
@@ -172,7 +478,7 @@ class Axis3:
 
 @dataclass(frozen=True, slots=True)
 class Angles:
-
+    """ class for angles """ 
     imu: Axis3
     target: Axis3
     target_speed: Axis3
