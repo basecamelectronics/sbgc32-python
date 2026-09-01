@@ -2,6 +2,83 @@ from dataclasses import dataclass
 from enum import IntEnum, IntFlag
 from typing import Mapping
 
+class SerialApiStatus(IntEnum):
+    TX_RX_OK = 0
+    TX_BUS_BUSY_ERROR = 2
+    RX_EMPTY_BUFF_ERROR = 3
+    RX_BUFFER_REALTIME_ERROR = 4
+    RX_HEADER_CHECKSUM_ERROR = 5
+    RX_PAYLOAD_CHECKSUM_ERROR = 6
+    RX_NOT_FOUND_ERROR = 7
+    RX_BUFFER_OVERFLOW_ERROR = 8
+
+
+class ControllerErrorCode(IntEnum):
+    NO_ERROR = 0
+    CMD_SIZE = 1
+    WRONG_PARAMS = 2
+    CRYPTO = 4
+    UNKNOWN_COMMAND = 6
+    WRONG_STATE = 8
+    NOT_SUPPORTED = 9
+    OPERATION_FAILED = 10
+    TEMPORARY = 11
+
+
+class TransparentCommandPort(IntEnum):
+    """Serial port on the destination device for CMD_TRANSPARENT_SAPI."""
+
+    DEVICE_1 = 0
+    DEVICE_2 = 1
+    DEVICE_3 = 2
+    DEVICE_4 = 3
+
+
+class TransparentCommandDevice(IntEnum):
+    """Destination device for CMD_TRANSPARENT_SAPI."""
+
+    SBGC32 = 4
+    GPS_IMU = 5
+    CAN_IMU_MAIN = 6
+    CAN_IMU_FRAME = 7
+    GPS_SPLIT_RECEIVER = 8
+    CAN_SERIAL_HUB_1 = 9
+    CAN_SERIAL_HUB_2 = 10
+    CAN_DRIVER_1 = 11
+    CAN_DRIVER_2 = 12
+    CAN_DRIVER_3 = 13
+    CAN_DRIVER_4 = 14
+
+
+class TransparentCommandFlag(IntFlag):
+    """Optional behaviour flags for CMD_TRANSPARENT_SAPI."""
+
+    SKIP_DATA_PACKET = 0
+    BLOCK_AND_WAIT = 1 << 6
+
+
+def transparent_command_target(
+    port: TransparentCommandPort | int,
+    device: TransparentCommandDevice | int,
+    flag: TransparentCommandFlag | int = TransparentCommandFlag.SKIP_DATA_PACKET,
+) -> int:
+    """Pack a transparent-command target byte from its protocol fields."""
+
+    try:
+        port = TransparentCommandPort(port)
+        device = TransparentCommandDevice(device)
+        flag = TransparentCommandFlag(flag)
+    except ValueError as error:
+        raise ValueError("invalid CMD_TRANSPARENT_SAPI target field") from error
+
+    if flag not in (
+        TransparentCommandFlag.SKIP_DATA_PACKET,
+        TransparentCommandFlag.BLOCK_AND_WAIT,
+    ):
+        raise ValueError("unsupported CMD_TRANSPARENT_SAPI flag")
+
+    return int(port | device | flag)
+
 
 class MotorsOffMode(IntEnum):
     """ Stopping mode accepted by CMD_MOTORS_OFF """
@@ -112,10 +189,13 @@ class StateVars:
 
 @dataclass(frozen=True, slots=True)
 class DebugPortPacket:
+    """One serial command mirrored from another controller port."""
+
     time_ms: int
     port_and_direction: int
     command_id: int
     payload_buffer: bytes
+    payload_size: int
 
 
 @dataclass(frozen=True, slots=True)
@@ -131,7 +211,11 @@ class AutoPidConfig:
 
 @dataclass(frozen=True, slots=True)
 class AutoPid2Axis:
-    """One axis configuration for CMD_AUTO_PID2."""
+    """One axis configuration for CMD_AUTO_PID2.
+
+    The frequency fields are expressed in Hz, as in the GUI. ``problem_margin``
+    is in 0.1 dB.
+    """
 
     axis_flags: int = 0
     gain: int = 0
@@ -143,7 +227,13 @@ class AutoPid2Axis:
 
 @dataclass(frozen=True, slots=True)
 class AutoPid2Config:
-    """Automatic PID v2 request (firmware 2.73+)."""
+    """Automatic PID v2 request (firmware 2.73+).
+
+    ``test_frequency_from`` is in Hz with a 0.1 Hz resolution (0..25.5 Hz).
+    ``test_frequency_to`` is in Hz with a 2 Hz resolution (0..510 Hz).
+    These are physical units rather than the two differently scaled protocol
+    bytes used by CMD_AUTO_PID2.
+    """
 
     action: AutoPid2Action | int
     command_flags: int = 0
@@ -152,8 +242,8 @@ class AutoPid2Config:
         AutoPid2Axis(), AutoPid2Axis(), AutoPid2Axis(),
     )
     general_flags: int = 0
-    test_frequency_from: int = 0
-    test_frequency_to: int = 0
+    test_frequency_from: float = 0.0
+    test_frequency_to: float = 0.0
     multi_position_flags: int = 0
     multi_position_angles: tuple[int, int, int, int] = (0, 0, 0, 0)
 
@@ -165,6 +255,8 @@ class AutoPidAxisState:
 
 @dataclass(frozen=True, slots=True)
 class AutoPidState:
+    """Latest CMD_AUTO_PID packet; ``p``, ``i``, and ``d`` are raw bytes."""
+
     p: tuple[int, int, int]
     i: tuple[int, int, int]
     d: tuple[int, int, int]
@@ -174,8 +266,18 @@ class AutoPidState:
 
 
 @dataclass(frozen=True, slots=True)
+class PidValues:
+    """Raw P/I/D bytes stored in one profile."""
+
+    profile_id: int
+    p: tuple[int, int, int]
+    i: tuple[int, int, int]
+    d: tuple[int, int, int]
+
+
+@dataclass(frozen=True, slots=True)
 class SyncMotorsConfig:
-    """Power pulse used by CMD_SYNC_MOTORS; it moves the selected motor."""
+    """ Power pulse used by CMD_SYNC_MOTORS; it moves the selected motor. """
 
     axis: SyncMotorAxis | int
     power: int
@@ -214,6 +316,134 @@ class ControlConfigFlag(IntFlag):
     SERVO_MODE_ENABLE = 1 << 1
     SERVO_MODE_DISABLE = 1 << 2
     LPF_EXTENDED_RANGE = 1 << 3
+
+
+class ControlExtDataSet(IntFlag):
+    ROLL_SPEED = 1 << 0
+    ROLL_ANGLE = 1 << 1
+    ROLL_ANGLE_HIGH_RES = 1 << 2
+    ROLL_SPEED_HIGH_RES = 1 << 3
+    PITCH_SPEED = 1 << 5
+    PITCH_ANGLE = 1 << 6
+    PITCH_ANGLE_HIGH_RES = 1 << 7
+    PITCH_SPEED_HIGH_RES = 1 << 8
+    YAW_SPEED = 1 << 10
+    YAW_ANGLE = 1 << 11
+    YAW_ANGLE_HIGH_RES = 1 << 12
+    YAW_SPEED_HIGH_RES = 1 << 13
+
+
+class ControlExtFlag(IntFlag):
+    DISABLE_ANGLE_ERROR_CORRECTION = 1 << 0
+
+
+@dataclass(frozen=True, slots=True)
+class ControlExtAxis:
+    mode: ControlMode | int = ControlMode.NO_CONTROL
+    flags: ControlExtFlag | int = 0
+    speed: int = 0
+    angle: int = 0
+
+
+@dataclass(frozen=True, slots=True)
+class ControlExt:
+    data_set: ControlExtDataSet | int
+    axes: tuple[ControlExtAxis, ControlExtAxis, ControlExtAxis]
+
+
+class ControlQuatFlag(IntFlag):
+    NEED_CONFIRM = 1 << 0
+    ATTITUDE_PACKED = 1 << 1
+    ATTITUDE_LIMITED_180 = 1 << 2
+    AUTO_TASK = 1 << 6
+
+
+@dataclass(frozen=True, slots=True)
+class ControlQuat:
+    mode: "ControlQuatMode | int"
+    flags: ControlQuatFlag | int = 0
+    attitude: tuple[float, float, float, float] = (1.0, 0.0, 0.0, 0.0)
+    speed: tuple[float, float, float] = (0.0, 0.0, 0.0)
+
+
+class ControlQuatConfigParameter(IntFlag):
+    MAX_SPEED = 1 << 0
+    ACCELERATION_LIMIT = 1 << 1
+    JERK_SLOPE = 1 << 2
+    FLAGS = 1 << 3
+    ATTITUDE_LPF_FREQUENCY = 1 << 4
+    SPEED_LPF_FREQUENCY = 1 << 5
+
+
+class ControlQuatConfigFlag(IntFlag):
+    MOTION_PROFILE_SPLIT_XYZ = 1 << 0
+
+
+@dataclass(frozen=True, slots=True)
+class ControlQuatConfig:
+    data_set: ControlQuatConfigParameter | int
+    max_speed: tuple[int, int, int] = (0, 0, 0)
+    acceleration_limit: tuple[int, int, int] = (0, 0, 0)
+    jerk_slope: tuple[int, int, int] = (0, 0, 0)
+    flags: ControlQuatConfigFlag | int = 0
+    attitude_lpf_frequency: int = 0
+    speed_lpf_frequency: int = 0
+
+
+class ExternalMotor(IntFlag):
+    ID_1 = 1 << 0
+    ID_2 = 1 << 1
+    ID_3 = 1 << 2
+    ID_4 = 1 << 3
+    ID_5 = 1 << 4
+    ID_6 = 1 << 5
+    ID_7 = 1 << 6
+
+
+class ExternalMotorAction(IntEnum):
+    OFF_FLOATING = 1
+    OFF_BRAKE = 2
+    OFF_SAFE = 3
+    ON = 4
+    HOME_POSITION = 5
+    SEARCH_HOME = 6
+
+
+class ExternalMotorParameter(IntFlag):
+    SETPOINT_32BIT = 1 << 0
+    PARAM1_16BIT = 1 << 1
+    PARAM1_32BIT = 1 << 2
+
+
+@dataclass(frozen=True, slots=True)
+class ExternalMotorControl:
+    setpoint: int
+    param1: int = 0
+
+
+class ExternalMotorsControlConfigParameter(IntFlag):
+    MODE = 1 << 0
+    MAX_SPEED = 1 << 1
+    MAX_ACCELERATION = 1 << 2
+    JERK_SLOPE = 1 << 3
+    MAX_TORQUE = 1 << 4
+
+
+class ExternalMotorsControlMode(IntEnum):
+    POSITION = 0
+    SPEED = 1
+    TORQUE = 2
+
+
+@dataclass(frozen=True, slots=True)
+class ExternalMotorsControlConfig:
+    motors: ExternalMotor | int
+    data_set: ExternalMotorsControlConfigParameter | int
+    mode: ExternalMotorsControlMode | int = ExternalMotorsControlMode.POSITION
+    max_speed: int = 0
+    max_acceleration: int = 0
+    jerk_slope: int = 0
+    max_torque: int = 0
 
 
 @dataclass(frozen=True, slots=True)
@@ -373,7 +603,6 @@ class ControlQuatStatus:
     setpoint_attitude_packed: bytes | None = None
     actual_attitude_packed: bytes | None = None
     raw_payload: bytes = b""
-    raw_payload: bytes = b""
 
 
 class DataStreamCommand(IntEnum):
@@ -416,6 +645,51 @@ class AdjustableVariable:
     """
 
     id: int
+    value: int
+
+
+@dataclass(frozen=True, slots=True)
+class AdjustableVariableFloat:
+    id: int
+    value: float
+
+
+@dataclass(frozen=True, slots=True)
+class AdjustableVariableTriggerSlot:
+    source: int
+    actions: tuple[int, int, int, int, int]
+
+
+@dataclass(frozen=True, slots=True)
+class AdjustableVariableAnalogSlot:
+    source: int
+    variable_id: int
+    min_value: int
+    max_value: int
+
+
+@dataclass(frozen=True, slots=True)
+class AdjustableVariablesConfig:
+    trigger_slots: tuple[AdjustableVariableTriggerSlot, ...]
+    analog_slots: tuple[AdjustableVariableAnalogSlot, ...]
+    reserved: bytes = b"\x00" * 8
+
+
+@dataclass(frozen=True, slots=True)
+class AdjustableVariablesState:
+    trigger_rc_data: int
+    trigger_action: int
+    analog_source_value: int
+    analog_variable_value: float
+    lut_source_value: int
+    lut_variable_value: float
+
+
+@dataclass(frozen=True, slots=True)
+class AdjustableVariableInfo:
+    id: int
+    min_value: int
+    max_value: int
     value: int
 
 
@@ -478,7 +752,7 @@ class Axis3:
 
 @dataclass(frozen=True, slots=True)
 class Angles:
-    """ class for angles """ 
+    """ Class for angles """ 
     imu: Axis3
     target: Axis3
     target_speed: Axis3
@@ -657,3 +931,73 @@ class BoardInfo3:
     can_driver_main_limit: int
     can_driver_aux_limit: int
     adjustable_variables_total: int
+
+
+@dataclass(frozen=True, slots=True)
+class CanModuleInfo:
+
+    can_id: int
+    board_ver: int
+    bootloader_ver: int
+    firmware_ver: int
+    	
+
+@dataclass(frozen=True, slots=True)
+class CanDeviceScan:
+
+    uid: bytes
+    can_id: int
+    can_type: int
+
+
+@dataclass(frozen=True, slots=True)
+class MenuExecutionResult:
+
+    started: CommandConfirmation | None = None
+    finished: CommandConfirmation | None = None
+
+
+class MenuCommandFlag(IntFlag):
+    NO = 0
+    CONFIRM = 1 << 0
+    CONFIRM_ON_FINISH = 1 << 1
+
+
+class TriggerPin(IntEnum):
+    RC_ROLL = 1
+    RC_PITCH = 2
+    EXT_FC_ROLL = 3
+    EXT_FC_PITCH = 4
+    RC_INPUT_YAW = 5
+    AUX_1 = 16
+    AUX_2 = 17
+    AUX_3 = 18
+    BUZZER = 32
+    SSAT_POWER = 33
+
+
+class TriggerPinState(IntEnum):
+    LOW = 0
+    HIGH = 1
+    FLOATING = 2
+
+
+class ServoOutput(IntFlag):
+    FC_ROLL = 1 << 0
+    FC_PITCH = 1 << 1
+    RC_PITCH = 1 << 2
+    AUX_1 = 1 << 3
+    CAN_DRIVER_1_PIN_1 = 1 << 4
+    CAN_DRIVER_1_PIN_2 = 1 << 5
+    CAN_DRIVER_2_PIN_1 = 1 << 6
+    CAN_DRIVER_2_PIN_2 = 1 << 7
+    CAN_DRIVER_3_PIN_1 = 1 << 8
+    CAN_DRIVER_3_PIN_2 = 1 << 9
+    CAN_DRIVER_4_PIN_1 = 1 << 10
+    CAN_DRIVER_4_PIN_2 = 1 << 11
+    CAN_DRIVER_5_PIN_1 = 1 << 12
+    CAN_DRIVER_5_PIN_2 = 1 << 13
+    CAN_DRIVER_6_PIN_1 = 1 << 14
+    CAN_DRIVER_6_PIN_2 = 1 << 15
+    CAN_DRIVER_7_PIN_1 = 1 << 16
+    CAN_DRIVER_7_PIN_2 = 1 << 17

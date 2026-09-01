@@ -1409,12 +1409,14 @@ sbgcCommandStatus_t SBGC32_SendTransparentCommand (sbgcGeneral_t *gSBGC, const s
 static void PostReadTransparentCommand (sbgcGeneral_t *gSBGC)
 {
 	sbgcTransparentCommand_t *cmd = (sbgcTransparentCommand_t*)curCmdDest_;
+	ui8 payloadSize = curCmd_->_payloadSize;
 
-	if (curCmd_->_destinationSize < (curCmd_->_payloadSize - 1))
+	if (payloadSize == 0 || curCmd_->_destinationSize < (payloadSize - 1))
 		SerialAPI_FatalErrorHandler();
 
 	cmd->target = gSBGC->_api->readByte(gSBGC);
-	gSBGC->_api->readBuff(gSBGC, cmd->payload, curCmd_->_payloadSize - 1);
+	cmd->payloadSize = payloadSize - 1;
+	gSBGC->_api->readBuff(gSBGC, cmd->payload, cmd->payloadSize);
 }
 
 /**	@brief	Receives data from serial port on

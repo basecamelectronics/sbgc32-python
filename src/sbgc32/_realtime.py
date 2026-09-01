@@ -1,8 +1,5 @@
-"""Realtime and angle response conversion."""
-
 from __future__ import annotations
 
-from os import error
 import struct
 import ctypes
 from types import MappingProxyType
@@ -12,7 +9,9 @@ from sbgc32._serial_api_library import NativeDataStreamInterval, NativeDebugVarI
 from collections.abc import Sequence
 
 from ._control import make_confirmation
+from ._service import format_table
 from .native import NativeError
+
 from .types import (
     Angles, AnglesExt, Axis3, AxisGAE, AxisRealtimeData, DataStreamCommand, DataStreamConfig,
     RealtimeData3, RealtimeData4, RealtimeDataCustom, RealtimeDataCustomFlag,
@@ -38,6 +37,87 @@ def get_angles_ext(self) -> AnglesExt:
         imu_angle=axis.imu_angle, target_angle=axis.target_angle,
         frame_cam_angle=axis.frame_cam_angle, reserved=bytes(axis.reserved),
     ) for axis in result.axis_gae))
+
+
+def format_angles(angles: Angles) -> str:
+    if not isinstance(angles, Angles):
+        raise TypeError("angles must be Angles")
+    rows = (
+        ("Roll", f"{angles.imu.roll:.3f}", f"{angles.target.roll:.3f}", f"{angles.target_speed.roll:.3f}"),
+        ("Pitch", f"{angles.imu.pitch:.3f}", f"{angles.target.pitch:.3f}", f"{angles.target_speed.pitch:.3f}"),
+        ("Yaw", f"{angles.imu.yaw:.3f}", f"{angles.target.yaw:.3f}", f"{angles.target_speed.yaw:.3f}"),
+    )
+    return format_table(("Axis", "IMU, deg", "Target, deg", "Target speed, deg/s"), rows)
+
+
+def format_realtime_data(data: RealtimeData3 | RealtimeData4) -> str:
+    if not isinstance(data, RealtimeData3):
+        raise TypeError("data must be RealtimeData3 or RealtimeData4")
+    axis_rows = tuple(
+        (
+            name,
+            str(imu_angle),
+            str(frame_angle),
+            str(target_angle),
+            str(power),
+            str(rtd.acc_data),
+            str(rtd.gyro_data),
+        )
+        for name, imu_angle, frame_angle, target_angle, power, rtd in zip(
+            ("Roll", "Pitch", "Yaw"),
+            data.imu_angle,
+            data.frame_imu_angle,
+            data.target_angle,
+            data.motor_power,
+            data.axis_rtd,
+        )
+    )
+    general_rows = (
+        ("Serial errors", str(data.serial_error_count)),
+        ("I2C errors", str(data.i2c_error_count)),
+        ("System error", f"0x{data.system_error:04X}"),
+        ("System sub-error", f"0x{data.system_sub_error:02X}"),
+        ("Error code", str(data.error_code)),
+        ("Battery level", str(data.bat_level)),
+        ("Cycle time", f"{data.cycle_time} us"),
+        ("Current IMU", str(data.cur_imu)),
+        ("Current profile", str(data.cur_profile)),
+        ("RC", f"{data.rc_roll}, {data.rc_pitch}, {data.rc_yaw}, {data.rc_cmd}"),
+    )
+    if isinstance(data, RealtimeData4):
+        general_rows += (
+            ("Current", str(data.current)),
+            ("IMU temperature", str(data.imu_temperature)),
+            ("Frame IMU temperature", str(data.frame_imu_temperature)),
+            ("System state flags", f"0x{data.system_state_flags:04X}"),
+        )
+    return "\n\n".join((
+        format_table(("Axis", "IMU", "Frame IMU", "Target", "Motor", "ACC", "Gyro"), axis_rows),
+        format_table(("Field", "Value"), general_rows),
+    ))
+
+
+def format_control_quat_status(status: ControlQuatStatus) -> str:
+    if not isinstance(status, ControlQuatStatus):
+        raise TypeError("status must be ControlQuatStatus")
+    rows: list[tuple[str, str]] = [
+        ("Requested fields", f"0x{int(status.requested_fields):04X}"),
+    ]
+    if status.mode is not None:
+        rows.append(("Mode", str(int(status.mode))))
+    if status.control_flags is not None:
+        rows.append(("Flags", f"0x{status.control_flags:02X}"))
+    for name, value in (
+        ("Target attitude", status.target_attitude),
+        ("Setpoint attitude", status.setpoint_attitude),
+        ("Actual attitude", status.actual_attitude),
+        ("Target speed", status.target_speed_raw),
+        ("Setpoint speed", status.setpoint_speed_raw),
+        ("Actual speed", status.actual_speed_raw),
+    ):
+        if value is not None:
+            rows.append((name, ", ".join(f"{item:g}" if isinstance(item, float) else str(item) for item in value)))
+    return format_table(("Field", "Value"), tuple(rows))
 
 
 def make_realtime_data_3(result) -> RealtimeData3:
@@ -159,6 +239,14 @@ def read_rc_inputs(self, sources: object) -> tuple[int | None, ...]:
     return tuple(_rc_value_to_standard(value) for value in values)
 
 
+def _data_stream_command_id(command: DataStreamCommand | int) -> int:
+    if isinstance(command, bool) or not isinstance(command, int):
+        raise TypeError("Command must be a DataStreamCommand or integer")
+    if not 0 <= command <= 0xFF:
+        raise ValueError("Command must be an integer in range 0...255")
+    return int(command)
+
+
 def _data_stream_config_to_native(config: DataStreamConfig) -> NativeDataStreamInterval:
     if not isinstance(config, DataStreamConfig):
         raise TypeError("Config must be a DataStreamConfig")
@@ -173,7 +261,7 @@ def _data_stream_config_to_native(config: DataStreamConfig) -> NativeDataStreamI
         raise ValueError("Config must contain from 0 to 8 bytes")
 
     return NativeDataStreamInterval(
-        command_id=int(config.command),
+        command_id=_data_stream_command_id(config.command),
         interval_ms=config.interval_ms,
         config=(ctypes.c_uint8 * 8).from_buffer_copy(config.config.ljust(8, b"\x00")),
         sync_to_data=config.sync_to_data,
@@ -199,7 +287,9 @@ def read_data_stream(self, config: DataStreamConfig, size: int | None = None,) -
     if not isinstance(config, DataStreamConfig):
         raise TypeError("Config must be a DataStreamConfig")
 
-    command = DataStreamCommand(config.command)
+    _data_stream_config_to_native(config)
+    command_id = _data_stream_command_id(config.command)
+    command = DataStreamCommand._value2member_map_.get(command_id)
 
     match command:
         case DataStreamCommand.REALTIME_DATA_CUSTOM:
@@ -228,7 +318,7 @@ def read_data_stream(self, config: DataStreamConfig, size: int | None = None,) -
     if type(size) is not int or not 1 <= size <= 0xFF:
         raise ValueError("Payload_size must be an integer in range 1...255")
 
-    return self._native.read_data_stream(self._device, int(config.command), size,)
+    return self._native.read_data_stream(self._device, command_id, size,)
 
 _DEBUG_VAR_NAME_CAPACITY = 256
 _DEBUG_VAR_REQUEST_CAPACITY = 0xFF
@@ -394,9 +484,6 @@ def request_debug_var_values_3(self, variables: Sequence[DebugVarInfo], selected
     variables = tuple(variables)
     if not variables:
         raise ValueError("Variables must not be empty")
-
-    #if selected_indexes is not None:
-    #    raise NotImplementedError("Masked DEBUG_VARS_3 is temporarily disabled: native parser is unsafe.")
 
     if tuple(variable.index for variable in variables) != tuple(range(len(variables))):
         raise ValueError("Variables must be a complete, index-ordered DEBUG_VARS_INFO_3 list")

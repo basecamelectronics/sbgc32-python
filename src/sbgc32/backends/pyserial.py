@@ -250,7 +250,7 @@ class PySerialLibrary(SerialApiLibrary):
             raise NativeError("Cannot recover a closed SimpleBGC connection.") from error
         super().recover(device)
 
-    def read_debug_port(self, device: int) -> tuple[int, int, int, bytes]:
+    def read_debug_port(self, device: int) -> tuple[int, int, int, bytes, int]:
         try:
             transport = self._transports[device]
         except KeyError as error:
@@ -259,15 +259,16 @@ class PySerialLibrary(SerialApiLibrary):
         packet = transport.pop_debug_packet()
         if packet is not None:
             time_ms, port_and_direction, command_id, payload = packet
-            return time_ms, port_and_direction, command_id, payload.ljust(255, b"\0")
+            return time_ms, port_and_direction, command_id, payload, len(payload)
 
-        # A direct SBGC32_ReadDebugPort call will receive this record itself.
-        # Avoid keeping a duplicate in the Python side queue.
-        transport.suppress_debug_capture(True)
-        try:
-            return super().read_debug_port(device)
-        finally:
-            transport.suppress_debug_capture(False)
+        # Keep a copy while the C parser receives this same record: it carries
+        # the variable payload length that the vendor structure does not expose.
+        result = super().read_debug_port(device)
+        packet = transport.pop_debug_packet()
+        if packet is None:
+            return result
+        time_ms, port_and_direction, command_id, payload = packet
+        return time_ms, port_and_direction, command_id, payload, len(payload)
 
 
 class PySerialBackend:

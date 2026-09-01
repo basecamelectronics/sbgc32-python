@@ -210,8 +210,8 @@ static sbgc_py_status_t sbgc_py_update_data_stream
 
     sbgcConfirm_t *confirm = SBGC_NO_CONFIRM;
 
-    if (device == NULL || data_stream_interval == NULL || data_stream_interval->sync_to_data > 1 
-                       || (!stop && data_stream_interval->interval_ms == 0) || (need_confirmation && confirmation == NULL))
+    if (device == NULL || data_stream_interval == NULL || data_stream_interval->syncToData > 1
+                       || (!stop && data_stream_interval->intervalMs == 0) || (need_confirmation && confirmation == NULL))
         return SBGC_PY_INVALID_ARGUMENT;
 
     if (!device->connected)
@@ -220,11 +220,7 @@ static sbgc_py_status_t sbgc_py_update_data_stream
     if (current_device != device)
         return SBGC_PY_ERROR;
 
-    native_stream.cmdID = data_stream_interval->cmd_id;
-    native_stream.intervalMs = data_stream_interval->interval_ms;
-    native_stream.syncToData = data_stream_interval->sync_to_data;
-
-    memcpy(native_stream.config, data_stream_interval->config, sizeof(native_stream.config));
+    native_stream = *data_stream_interval;
 
 #if (SBGC_NEED_CONFIRM_CMD)
     if (need_confirmation)

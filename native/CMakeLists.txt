@@ -23,6 +23,7 @@ set(SBGC_PY_SERIAL_API_SOURCES
     "${SERIAL_API_DIR}/modules/adjvar/adjvar.c"
     "${SERIAL_API_DIR}/modules/realtime/realtime.c"
     "${SERIAL_API_DIR}/modules/service/service.c"
+    "${SERIAL_API_DIR}/modules/profiles/profiles.c"
 )
 
 function(add_sbgc_python_library target transport_source output_name)

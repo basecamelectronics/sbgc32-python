@@ -7,18 +7,25 @@ class Command(IntEnum):
     # Device information
     CMD_BOARD_INFO              = 86    # Request board and firmware information
     CMD_BOARD_INFO_3            = 20    # Request additional board information
+    CMD_READ_PARAMS_3           = 21
     CMD_AUTO_PID                = 35    # Starts automatic PID calibration !
     CMD_AUTO_PID2               = 108   # Starts automatic PID calibration ver.2
     CMD_SYNC_MOTORS             = 123   # Mechanically align motors working in parallel for a single axis
 
     # Real-time state monitoring and diagnostics
     CMD_REALTIME_DATA_CUSTOM    = 88    # Request configurable realtime data
-    CMD_REALTIME_DATA           = 22    # Request real-time data
+    CMD_REALTIME_DATA           = 68    # Request real-time data
     CMD_REALTIME_DATA_3         = 23    # Request real-time data
     CMD_REALTIME_DATA_4         = 25    # Receive extended version of real-time data
+    CMD_TRIGGER_PIN             = 84
+    CMD_DATA_STREAM_INTERVAL    = 85
     CMD_GET_ANGLES              = 73    # Request information related to IMU angles and RC control state
     CMD_GET_ANGLES_EXT          = 61    # Request information related to IMU angles and RC control state
     CMD_SELECT_IMU_3            = 24    # Select an IMU or run its calibration action
+    CMD_SERVO_OUT               = 36
+    CMD_SIGN_MESSAGE            = 50
+    CMD_BOOT_MODE_3             = 51
+    CMD_SCRIPT_DEBUG            = 58
     CMD_DEBUG_VARS_INFO_3       = 253
     CMD_DEBUG_VARS_3            = 254
     CMD_CONTROL_QUAT_STATUS     = 141   # Read quaternion-control status
@@ -27,16 +34,39 @@ class Command(IntEnum):
     CMD_SAVE_PARAMS_3           = 32    # Saves current values of parameters linked to adjustable variables in EEPROM
     CMD_SET_ADJ_VARS_VAL        = 31    # Update the value of selected parameter(-s)
     CMD_GET_ADJ_VARS_VAL        = 64    # Query the actual value of selected parameter(-s)
+    CMD_READ_ADJ_VARS_CFG       = 43
+    CMD_WRITE_ADJ_VARS_CFG      = 44
+    CMD_ADJ_VARS_STATE          = 46
+    CMD_ADJ_VARS_INFO           = 132
+    CMD_SET_ADJ_VARS_VAL_F      = 134
+    CMD_GET_ADJ_VARS_VAL_F      = 135
 
     # Controlling gimbal movements
     CMD_CONTROL                 = 67    # Send 15-byte gimbal movement command
     CMD_CONTROL_CONFIG          = 90    # Configure the handling of CMD_CONTROL command
+    CMD_CAN_DEVICE_SCAN         = 96
+    CMD_READ_RC_INPUTS          = 100
+    CMD_READ_STATE_VARS         = 111
+    CMD_WRITE_STATE_VARS        = 112
+    CMD_CONTROL_EXT             = 121
+    CMD_EXT_MOTORS_ACTION       = 128
+    CMD_EXT_MOTORS_CONTROL      = 129
+    CMD_EXT_MOTORS_CONTROL_CONFIG = 130
+    CMD_EXT_MOTORS_STATE        = 131
+    CMD_SERVO_OUT_EXT           = 133
+    CMD_CONTROL_QUAT            = 140
+    CMD_CONTROL_QUAT_CONFIG     = 142
+    CMD_TRANSPARENT_SAPI        = 151
+    CMD_SET_DEBUG_PORT          = 249
+    CMD_API_VIRT_CH_CONTROL     = 45
+    CMD_API_VIRT_CH_HIGH_RES    = 116
 
     # Miscellaneous commands
     CMD_RESET                   = 114   # Tx: reset device / Rx: notification on device reset
     CMD_MOTORS_ON               = 77    # Switch motors ON
     CMD_MOTORS_OFF              = 109   # Switch motors OFF
     CMD_EXECUTE_MENU            = 69    # Execute menu command
+    CMD_MODULE_LIST             = 76
     CMD_RUN_SCRIPT              = 57    # Start or stop user-written script
     CMD_BEEP_SOUND              = 89    # Play melody by motors or emit standard beep sound
 

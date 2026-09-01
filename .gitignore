@@ -3,6 +3,7 @@
 /native/build-x64/
 /native/build/
 /.venv/
+/.vs/
 /.venv-new/
 /src/sbgc32.egg-info/
 /src/sbgc32/_native/Release/
@@ -22,10 +23,13 @@ __pycache__/
 /src/sbgc32/_native/*.so
 /src/sbgc32/_native/*.lib
 /src/sbgc32/_native/*.exp
+/src/sbgc32/_native/*.pdb
 
 # IDE project settings
 /.idea/
 .vscode/
+CppProperties.json
+CMakeSettings.json
 
 # Workspace for test
 Test.py

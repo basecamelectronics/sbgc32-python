@@ -9,8 +9,23 @@ It communicates with SimpleBGC controllers through a COM port
 and provides access to selected Serial API commands.
 
 The package uses a native DLL as a bridge to the vendored C Serial API.
-The bridge uses PySerial for transport and keeps Serial API structures and
+The bridge uses PySerial or native C for transport and keeps Serial API structures and
 packet handling inside native code.
+
+How to use code
+-----------------------
+Download wheel you need from [`dist/`](dist/). Place file to workspace.
+
+In powershell or other cmd install wheel:
+   ```powershell
+   py -m pip install .\sbgc32-...name.whl
+   ```
+
+In `.py` file import library:
+
+    ```python
+    from sbgc32 import SimpleBGC
+    ```
 
 
 Files Description
@@ -22,8 +37,7 @@ Files Description
 
 [`examples/`](examples/) - executable examples for connecting to and testing a controller;
 
-[`src/sbgc32/`](src/sbgc32/) - Python package: public API, value types,
-command identifiers, and ctypes bindings for the DLL;
+[`src/sbgc32/`](src/sbgc32/) - Python package: public API, value types, command identifiers, and ctypes bindings for the DLL;
 
 [`src/sbgc32/backend`](src/sbgc32/backend/) - backend for interaction with serial port;
 
@@ -136,22 +150,6 @@ $env:SBGC32_WHEEL_BACKEND = "pyserial"
 python -m build --wheel --outdir dist\pyserial
 ```
 
-
-How to use code
------------------------
-Download wheel you need. Place file to workspace.
-
-In powershell or other cmd install wheel:
-   ```powershell
-   py -m pip install .\sbgc32-...name.whl
-   ```
-In `.py` file import library:
-
-    ```python
-    from sbgc32 import SimpleBGC
-    ```
-You can also see a description of command use `print(SimpleBGC.name_of_function.__doc__)` 
-
 Documentation
 -----------
 Build the local documentation site:
@@ -162,6 +160,9 @@ py -m sphinx -W --keep-going -b html .\docs\source .\docs\build\html
 ```
 
 See [`docs/README.md`](docs/README.md) for details.
+
+You can also see a description of command use `print(SimpleBGC.name_of_function.__doc__)` 
+
 
 Feedback
 -----------

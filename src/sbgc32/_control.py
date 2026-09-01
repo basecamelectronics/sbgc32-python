@@ -5,7 +5,16 @@ from __future__ import annotations
 import ctypes
 from math import isfinite
 
-from .native import NativeControlAxisConfig, NativeControlConfig
+from ._serial_api_library import (
+    NativeControlAxisConfig,
+    NativeControlConfig,
+    NativeControlExt,
+    NativeControlExtAxis,
+    NativeControlQuat,
+    NativeControlQuatConfig,
+    NativeExternalMotorControl,
+    NativeExternalMotorsControlConfig,
+)
 from .types import (
     CommandConfirmation,
     ConfirmationStatus,
@@ -13,6 +22,14 @@ from .types import (
     ControlAxisConfig,
     ControlConfig,
     ControlConfigFlag,
+    ControlExt,
+    ControlExtAxis,
+    ControlQuat,
+    ControlQuatConfig,
+    ControlQuatMode,
+    ExternalMotorAction,
+    ExternalMotorControl,
+    ExternalMotorsControlConfig,
     ControlFlag,
     ControlMode,
 )
@@ -170,3 +187,150 @@ def set_api_virtual_channels(self, values: object) -> None:
             raise ValueError(f"Channel {index} must be in range {_API_VIRTUAL_MIN}...{_API_VIRTUAL_MAX} or None")
 
     self._native.set_api_virtual_channels(self._device, tuple(native_values))
+
+
+def _validate_int(value: object, name: str, minimum: int, maximum: int) -> int:
+    if type(value) is not int or not minimum <= value <= maximum:
+        raise ValueError(f"{name} must be an integer in range {minimum}..{maximum}")
+    return value
+
+
+def _validate_tuple(values: object, name: str, length: int, minimum: int, maximum: int) -> tuple[int, ...]:
+    if not isinstance(values, tuple) or len(values) != length:
+        raise ValueError(f"{name} must be a tuple with {length} entries")
+    return tuple(_validate_int(value, name, minimum, maximum) for value in values)
+
+
+def control_ext(self, control: ControlExt) -> None:
+    self._ensure_open()
+    if not isinstance(control, ControlExt):
+        raise TypeError("control must be a ControlExt")
+    data_set = _validate_int(int(control.data_set), "data_set", 1, 0xFFFF)
+    if len(control.axes) != 3 or any(not isinstance(axis, ControlExtAxis) for axis in control.axes):
+        raise TypeError("control.axes must contain three ControlExtAxis values")
+    axes = (NativeControlExtAxis * 3)(*(
+        NativeControlExtAxis(
+            mode=_validate_int(int(axis.mode), "axis mode", 0, 0xFF),
+            flags=_validate_int(int(axis.flags), "axis flags", 0, 0xFF),
+            speed=_validate_int(axis.speed, "axis speed", -0x80000000, 0x7FFFFFFF),
+            angle=_validate_int(axis.angle, "axis angle", -0x80000000, 0x7FFFFFFF),
+        ) for axis in control.axes
+    ))
+    self._native.control_ext(self._device, NativeControlExt(data_set=data_set, axes=axes))
+
+
+def control_quat(self, control: ControlQuat, *, need_confirmation: bool = False) -> CommandConfirmation | None:
+    self._ensure_open()
+    if not isinstance(control, ControlQuat):
+        raise TypeError("control must be a ControlQuat")
+    mode = _validate_int(int(control.mode), "mode", 0, 0xFF)
+    try:
+        ControlQuatMode(mode)
+    except ValueError as error:
+        raise ValueError("mode must be a supported quaternion control mode") from error
+    flags = _validate_int(int(control.flags), "flags", 0, 0xFF)
+    if not isinstance(control.attitude, tuple) or len(control.attitude) != 4 or not isinstance(control.speed, tuple) or len(control.speed) != 3:
+        raise ValueError("attitude must have 4 values and speed must have 3 values")
+    values = tuple(control.attitude) + tuple(control.speed)
+    if any(type(value) not in (int, float) or not isfinite(value) for value in values):
+        raise ValueError("quaternion control values must be finite")
+    native = NativeControlQuat(
+        mode=mode,
+        flags=flags,
+        attitude=(ctypes.c_float * 4)(*control.attitude),
+        speed=(ctypes.c_float * 3)(*control.speed),
+    )
+    return make_confirmation(self._native.control_quat(
+        self._device, native, need_confirmation=need_confirmation
+    ))
+
+
+def configure_control_quat(
+    self, config: ControlQuatConfig, *, need_confirmation: bool = False
+) -> CommandConfirmation | None:
+    self._ensure_open()
+    if not isinstance(config, ControlQuatConfig):
+        raise TypeError("config must be a ControlQuatConfig")
+    data_set = _validate_int(int(config.data_set), "data_set", 1, 0xFFFF)
+    native = NativeControlQuatConfig(
+        data_set=data_set,
+        max_speed=(ctypes.c_uint16 * 3)(*_validate_tuple(config.max_speed, "max_speed", 3, 0, 0xFFFF)),
+        acceleration_limit=(ctypes.c_uint16 * 3)(*_validate_tuple(config.acceleration_limit, "acceleration_limit", 3, 0, 0xFFFF)),
+        jerk_slope=(ctypes.c_uint16 * 3)(*_validate_tuple(config.jerk_slope, "jerk_slope", 3, 0, 0xFFFF)),
+        flags=_validate_int(int(config.flags), "flags", 0, 0xFFFF),
+        attitude_lpf_frequency=_validate_int(config.attitude_lpf_frequency, "attitude_lpf_frequency", 0, 0xFF),
+        speed_lpf_frequency=_validate_int(config.speed_lpf_frequency, "speed_lpf_frequency", 0, 0xFF),
+    )
+    return make_confirmation(self._native.control_quat_config(
+        self._device, native, need_confirmation=need_confirmation
+    ))
+
+
+def ext_motors_action(
+    self, motors: int, action: ExternalMotorAction | int, *, need_confirmation: bool = False
+) -> CommandConfirmation | None:
+    self._ensure_open()
+    motors = _validate_int(int(motors), "motors", 1, 0x7F)
+    action = _validate_int(int(action), "action", 1, 6)
+    return make_confirmation(self._native.ext_motors_action(
+        self._device, motors, action, need_confirmation=need_confirmation
+    ))
+
+
+def control_ext_motors(
+    self,
+    control: ExternalMotorControl,
+    motors: int,
+    data_set: int = 0,
+    *,
+    need_confirmation: bool = False,
+) -> CommandConfirmation | None:
+    self._ensure_open()
+    if not isinstance(control, ExternalMotorControl):
+        raise TypeError("control must be an ExternalMotorControl")
+    native = NativeExternalMotorControl(
+        setpoint=_validate_int(control.setpoint, "setpoint", -0x80000000, 0x7FFFFFFF),
+        param1=_validate_int(control.param1, "param1", -0x80000000, 0x7FFFFFFF),
+    )
+    return make_confirmation(self._native.ext_motors_control(
+        self._device,
+        native,
+        _validate_int(int(motors), "motors", 1, 0x7F),
+        _validate_int(int(data_set), "data_set", 0, 7),
+        need_confirmation=need_confirmation,
+    ))
+
+
+def configure_ext_motors(
+    self, config: ExternalMotorsControlConfig, *, need_confirmation: bool = False
+) -> CommandConfirmation | None:
+    self._ensure_open()
+    if not isinstance(config, ExternalMotorsControlConfig):
+        raise TypeError("config must be an ExternalMotorsControlConfig")
+    native = NativeExternalMotorsControlConfig(
+        motors=_validate_int(int(config.motors), "motors", 1, 0x7F),
+        data_set=_validate_int(int(config.data_set), "data_set", 1, 0x1F),
+        mode=_validate_int(int(config.mode), "mode", 0, 2),
+        max_speed=_validate_int(config.max_speed, "max_speed", 0, 0xFFFF),
+        max_acceleration=_validate_int(config.max_acceleration, "max_acceleration", 0, 0xFFFF),
+        jerk_slope=_validate_int(config.jerk_slope, "jerk_slope", 0, 0xFFFF),
+        max_torque=_validate_int(config.max_torque, "max_torque", 0, 0xFFFF),
+    )
+    return make_confirmation(self._native.ext_motors_control_config(
+        self._device, native, need_confirmation=need_confirmation
+    ))
+
+
+def set_api_virtual_channels_hr(self, values: object) -> None:
+    self._ensure_open()
+    try:
+        requested = tuple(values)
+    except TypeError as error:
+        raise TypeError("values must be an iterable of channel values or None") from error
+    if not 1 <= len(requested) <= _API_VIRTUAL_CHANNEL_COUNT:
+        raise ValueError("values must contain from 1 to 32 entries")
+    native_values = tuple(
+        -32768 if value is None else _validate_int(value, "channel value", -16384, 16384)
+        for value in requested
+    )
+    self._native.set_api_virtual_channels_hr(self._device, native_values)

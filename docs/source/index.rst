@@ -16,9 +16,17 @@ bit definitions.
    :caption: Guides
 
    realtime
+   control
+   adjvars
+   service
+   execute-formatting
 
 .. toctree::
    :maxdepth: 2
    :caption: API reference
 
    api/realtime
+   api/control
+   api/adjvars
+   api/service
+   api/execute-formatting

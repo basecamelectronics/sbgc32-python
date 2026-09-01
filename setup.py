@@ -10,6 +10,7 @@ from wheel.bdist_wheel import bdist_wheel
 
 
 WHEEL_BACKEND = os.environ.get("SBGC32_WHEEL_BACKEND", "native_c")
+VERSION = os.environ.get("SBGC32_VERSION", "0.6.0").lstrip("v")
 
 PROFILES = {
     "native_c": {
@@ -51,7 +52,7 @@ class BinaryWheel(bdist_wheel):
 
 setup(
     name=PROFILE["name"],
-    version="0.5.0",
+    version=VERSION,
     description="Python bindings for the SimpleBGC32 Serial API",
     python_requires=">=3.10",
     install_requires=PROFILE["dependencies"],

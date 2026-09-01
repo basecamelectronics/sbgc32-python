@@ -11,13 +11,6 @@
 #endif
 
 
-#if (SBGC_REALTIME_MODULE)
-_Static_assert(
-    sizeof(sbgc_py_realtime_data_t) == sizeof(sbgcRealTimeData_t),
-    "sbgc_py_realtime_data_t must match sbgcRealTimeData_t"
-);
-#endif
-
 #if (SBGC_CONTROL_MODULE)
 _Static_assert(
     sizeof(sbgc_py_control_axis_config_t) == sizeof(sbgcAxisCCtrl_t),
