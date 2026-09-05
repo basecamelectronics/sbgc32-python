@@ -215,6 +215,10 @@ def _legacy_pid_gui_value(value: int) -> float:
     return 0.1 + value * 0.02
 
 
+def render_function(row, widths):
+    return "  ".join(value.ljust(width) for value, width in zip(row, widths)).rstrip()
+
+
 def format_auto_pid_state(state: AutoPidState) -> str:
     if not isinstance(state, AutoPidState):
         raise TypeError("state must be an AutoPidState")
@@ -242,10 +246,15 @@ def format_auto_pid_state(state: AutoPidState) -> str:
         )
 
     widths = tuple(max(len(row[column]) for row in rows) for column in range(len(headers)))
-    render = lambda row: "  ".join(value.ljust(width) for value, width in zip(row, widths)).rstrip()
     separator = "  ".join("-" * width for width in widths)
 
-    return "\n".join((render(headers), separator, *(render(row) for row in rows[1:])))
+    return "\n".join(
+        (
+            render_function(headers, widths),
+            separator,
+            *(render_function(row, widths) for row in rows[1:]),
+        )
+    )
 
 
 def read_profile_pid_values(self, profile_id: int = 0xFF) -> PidValues:
@@ -286,19 +295,29 @@ def format_profile_pid_values(values: PidValues) -> str:
         )
 
     widths = tuple(max(len(row[column]) for row in rows) for column in range(len(headers)))
-    render = lambda row: "  ".join(value.ljust(width) for value, width in zip(row, widths)).rstrip()
     separator = "  ".join("-" * width for width in widths)
 
-    return "\n".join((render(headers), separator, *(render(row) for row in rows[1:])))
+    return "\n".join(
+        (
+            render_function(headers, widths),
+            separator,
+            *(render_function(row, widths) for row in rows[1:]),
+        )
+    )
 
 
 def format_table(headers: tuple[str, ...], rows: tuple[tuple[str, ...], ...]) -> str:
     widths = tuple(
         max(len(row[column]) for row in (headers, *rows)) for column in range(len(headers))
     )
-    render = lambda row: "  ".join(value.ljust(width) for value, width in zip(row, widths)).rstrip()
     separator = "  ".join("-" * width for width in widths)
-    return "\n".join((render(headers), separator, *(render(row) for row in rows)))
+    return "\n".join(
+        (
+            render_function(headers, widths),
+            separator,
+            *(render_function(row, widths) for row in rows),
+        )
+    )
 
 
 def format_board_info(info: BoardInfo) -> str:
