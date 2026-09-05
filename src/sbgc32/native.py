@@ -5,4 +5,7 @@ module while ABI declarations and DLL handling can
 evolve independently.
 """
 
-__all__ = [name for name in globals() if name.startswith("Native")]
+from . import _native_abi
+
+__all__ = _native_abi.__all__
+globals().update({name: getattr(_native_abi, name) for name in __all__})
