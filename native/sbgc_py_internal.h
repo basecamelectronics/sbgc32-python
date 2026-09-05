@@ -205,7 +205,10 @@ typedef struct
 }   sbgc_py_adjvar_info_t;
 
 
-typedef struct
+/* CMD_CONTROL_CONFIG is a 41-byte wire-format packet. Keep these mirror
+ * structures packed on every compiler; MSVC receives /Zp1 from CMake, but
+ * GCC and Clang need the PACKED__ attribute explicitly. */
+typedef struct PACKED__
 {
     ui8                         angle_lpf;
     ui8                         speed_lpf;
@@ -217,7 +220,7 @@ typedef struct
 }   sbgc_py_control_axis_config_t;
 
 
-typedef struct
+typedef struct PACKED__
 {
     ui16                        timeout_ms;
     ui8                         channel_priorities [5];

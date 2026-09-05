@@ -1,5 +1,6 @@
 # Python environments, caches and generated build outputs
 /build/
+/wheelhouse/
 /native/build-x64/
 /native/build/
 /.venv/

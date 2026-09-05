@@ -54,10 +54,10 @@ jobs:
         run: cmake --build build/native --config Release
 
       - name: Build wheel
-        run: python -m build --wheel --outdir dist
+        run: python -m build --wheel --outdir wheelhouse
 
       - name: Validate wheel metadata
-        run: python -m twine check dist/*
+        run: python -m twine check wheelhouse/*.whl
 
       - name: Install built wheel
         run: >-
@@ -65,7 +65,7 @@ jobs:
           "import glob, subprocess, sys;
           subprocess.check_call([
               sys.executable, '-m', 'pip', 'install',
-              '--force-reinstall', *glob.glob('dist/*.whl')
+              '--force-reinstall', *glob.glob('wheelhouse/*.whl')
           ])"
 
       - name: Smoke-test installed package
@@ -80,5 +80,5 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: sbgc32-pyserial-${{ matrix.os }}
-          path: dist/*.whl
+          path: wheelhouse/*.whl
           if-no-files-found: error
