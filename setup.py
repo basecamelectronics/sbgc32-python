@@ -10,7 +10,7 @@ from wheel.bdist_wheel import bdist_wheel
 
 
 WHEEL_BACKEND = os.environ.get("SBGC32_WHEEL_BACKEND", "native_c")
-VERSION = os.environ.get("SBGC32_VERSION", "0.6.0").lstrip("v")
+VERSION = os.environ.get("SBGC32_VERSION", "0.9.0").lstrip("v")
 
 PROFILES = {
     "native_c": {

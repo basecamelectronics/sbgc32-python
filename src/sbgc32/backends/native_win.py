@@ -1,4 +1,4 @@
-""" Windows backend that opens and owns a COM port in the native C library. """
+"""Windows backend that opens and owns a COM port in the native C library."""
 
 from __future__ import annotations
 
@@ -8,7 +8,7 @@ from .._serial_api_library import NativeError, NativeLibrary
 
 
 class NativeWinBackend:
-    """ Connect SimpleBGC Serial API to a Win32 COM transport. """
+    """Connect SimpleBGC Serial API to a Win32 COM transport."""
 
     name = "native_win"
 

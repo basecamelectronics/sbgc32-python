@@ -19,6 +19,10 @@ bit definitions.
    control
    adjvars
    service
+   calibration
+   eeprom
+   imu
+   profiles
    execute-formatting
 
 .. toctree::
@@ -29,4 +33,8 @@ bit definitions.
    api/control
    api/adjvars
    api/service
+   api/calibration
+   api/eeprom
+   api/imu
+   api/profiles
    api/execute-formatting

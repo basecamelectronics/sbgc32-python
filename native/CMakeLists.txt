@@ -13,6 +13,10 @@ set(SBGC_PY_SERIAL_API_SOURCES
     sbgc_py_adjvars.c
     sbgc_py_realtime.c
     sbgc_py_service.c
+    sbgc_py_eeprom.c
+    sbgc_py_profiles.c
+    sbgc_py_imu.c
+    sbgc_py_calib.c
     "${SERIAL_API_DIR}/sbgc32.c"
     "${SERIAL_API_DIR}/core/commandBuild.c"
     "${SERIAL_API_DIR}/core/lowLayer.c"
@@ -24,6 +28,9 @@ set(SBGC_PY_SERIAL_API_SOURCES
     "${SERIAL_API_DIR}/modules/realtime/realtime.c"
     "${SERIAL_API_DIR}/modules/service/service.c"
     "${SERIAL_API_DIR}/modules/profiles/profiles.c"
+    "${SERIAL_API_DIR}/modules/eeprom/eeprom.c"
+    "${SERIAL_API_DIR}/modules/imu/imu.c"
+    "${SERIAL_API_DIR}/modules/calib/calib.c"
 )
 
 function(add_sbgc_python_library target transport_source output_name)

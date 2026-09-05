@@ -1,4 +1,4 @@
-""" Cross-platform transport that supplies SerialAPI through pyserial callbacks. """
+"""Cross-platform transport that supplies SerialAPI through pyserial callbacks."""
 
 from __future__ import annotations
 
@@ -9,7 +9,6 @@ from time import monotonic_ns
 from typing import Any
 
 from .._serial_api_library import NativeError, SerialApiLibrary
-
 
 TxCallback = ctypes.CFUNCTYPE(
     ctypes.c_uint8,
@@ -23,7 +22,7 @@ TimeCallback = ctypes.CFUNCTYPE(ctypes.c_uint32, ctypes.c_void_p)
 
 
 class _PySerialTransport:
-    """ Reader thread and byte queue used by the native SerialAPI callbacks. """
+    """Reader thread and byte queue used by the native SerialAPI callbacks."""
 
     def __init__(self, port: str, baudrate: int) -> None:
         try:
@@ -43,7 +42,10 @@ class _PySerialTransport:
 
     def _open(self) -> None:
         self._serial: Any = self._serial_module.Serial(
-            self._port, self._baudrate, timeout=0.1, write_timeout=1,
+            self._port,
+            self._baudrate,
+            timeout=0.1,
+            write_timeout=1,
         )
         self._stop_reader = Event()
         self._serial.reset_input_buffer()
@@ -54,7 +56,7 @@ class _PySerialTransport:
         while not self._stop_reader.is_set():
             try:
                 data = self._serial.read(self._serial.in_waiting or 1)
-            except Exception:
+            except Exception:  # noqa: BLE001
                 return
             if data:
                 with self._buffer_lock:
@@ -71,12 +73,14 @@ class _PySerialTransport:
                 continue
 
             self._debug_scan.append(value)
-            if len(self._debug_scan) == 4:
-                if (self._debug_scan[1] + self._debug_scan[2]) & 0xFF != self._debug_scan[3]:
-                    self._debug_scan.clear()
-                    if value == 0x24:
-                        self._debug_scan.append(value)
-                    continue
+            if (
+                len(self._debug_scan) == 4
+                and (self._debug_scan[1] + self._debug_scan[2]) & 0xFF != self._debug_scan[3]
+            ):
+                self._debug_scan.clear()
+                if value == 0x24:
+                    self._debug_scan.append(value)
+                continue
 
             if len(self._debug_scan) < 4:
                 continue
@@ -90,11 +94,17 @@ class _PySerialTransport:
 
             frame = self._debug_scan
             payload_size = frame[2]
-            payload = frame[4:4 + payload_size]
+            payload = frame[4 : 4 + payload_size]
             received_crc = frame[payload_size + 4] | (frame[payload_size + 5] << 8)
-            if frame[1] == 249 and payload_size >= 4 and self._crc16(frame[1:4 + payload_size]) == received_crc:
+            if (
+                frame[1] == 249
+                and payload_size >= 4
+                and self._crc16(frame[1 : 4 + payload_size]) == received_crc
+            ):
                 packet = (
-                    payload[0] | (payload[1] << 8), payload[2], payload[3],
+                    payload[0] | (payload[1] << 8),
+                    payload[2],
+                    payload[3],
                     bytes(payload[4:]),
                 )
                 if len(self._debug_packets) == 8:
@@ -120,7 +130,7 @@ class _PySerialTransport:
                 return False
             self._serial.flush()
             return True
-        except Exception:
+        except Exception:  # noqa: BLE001
             return False
 
     def read_byte(self) -> int | None:
@@ -151,7 +161,7 @@ class _PySerialTransport:
         self._stop_reader.set()
         try:
             self._serial.cancel_read()
-        except Exception:
+        except Exception:  # noqa: BLE001
             pass
         self._reader.join(timeout=1)
         if self._serial.is_open:
@@ -167,7 +177,7 @@ def _transport_from_context(context: int) -> _PySerialTransport:
 def _serial_transmit(context: int, data: ctypes.POINTER(ctypes.c_uint8), size: int) -> int:
     try:
         return 0 if _transport_from_context(context).write(ctypes.string_at(data, size)) else 1
-    except Exception:
+    except Exception:  # noqa: BLE001
         return 1
 
 
@@ -179,7 +189,7 @@ def _serial_receive_byte(context: int, data: ctypes.POINTER(ctypes.c_uint8)) -> 
             return 1
         data[0] = value
         return 0
-    except Exception:
+    except Exception:  # noqa: BLE001
         return 1
 
 
@@ -187,7 +197,7 @@ def _serial_receive_byte(context: int, data: ctypes.POINTER(ctypes.c_uint8)) -> 
 def _serial_available_bytes(context: int) -> int:
     try:
         return _transport_from_context(context).available()
-    except Exception:
+    except Exception:  # noqa: BLE001
         return 0
 
 
@@ -203,7 +213,11 @@ class PySerialLibrary(SerialApiLibrary):
     def __init__(self) -> None:
         super().__init__(library_stem="sbgc_python_pyserial")
         self._library.sbgc_py_open.argtypes = [
-            ctypes.c_void_p, TxCallback, RxCallback, AvailableCallback, TimeCallback,
+            ctypes.c_void_p,
+            TxCallback,
+            RxCallback,
+            AvailableCallback,
+            TimeCallback,
         ]
         self._library.sbgc_py_open.restype = ctypes.c_void_p
         self._transports: dict[int, _PySerialTransport] = {}

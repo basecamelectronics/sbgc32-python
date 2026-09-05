@@ -18,7 +18,7 @@ def execute(gimbal: SimpleBGC, command: Command | int, **kwargs: object) -> obje
     transport and controller state belong to that object.
     """
     if isinstance(command, ResponseCommand):
-        raise ValueError(f"{command.name} is sent by the board and cannot be executed.")
+        raise TypeError(f"{command.name} is sent by the board and cannot be executed.")
     command = Command(command)
 
     reads = {
@@ -34,7 +34,9 @@ def execute(gimbal: SimpleBGC, command: Command | int, **kwargs: object) -> obje
 
     if command in reads:
         if kwargs:
-            raise TypeError(f"{command.name} does not accept keyword arguments: {', '.join(kwargs)}")
+            raise TypeError(
+                f"{command.name} does not accept keyword arguments: {', '.join(kwargs)}"
+            )
         return reads[command]()
 
     if command is Command.CMD_REALTIME_DATA_CUSTOM:
@@ -106,9 +108,16 @@ def execute(gimbal: SimpleBGC, command: Command | int, **kwargs: object) -> obje
         return gimbal.write_adj_vars_config(config, need_confirmation=need_confirmation)
 
     if command is Command.CMD_ADJ_VARS_STATE:
-        selectors = tuple(gimbal._required_argument(command, kwargs, name) for name in (
-            "trigger_slot", "analog_source_id", "analog_variable_id", "lut_source_id", "lut_variable_id"
-        ))
+        selectors = tuple(
+            gimbal._required_argument(command, kwargs, name)
+            for name in (
+                "trigger_slot",
+                "analog_source_id",
+                "analog_variable_id",
+                "lut_source_id",
+                "lut_variable_id",
+            )
+        )
         gimbal._reject_remaining_arguments(command, kwargs)
         return gimbal.get_adj_vars_state(*selectors)
 
@@ -119,8 +128,225 @@ def execute(gimbal: SimpleBGC, command: Command | int, **kwargs: object) -> obje
 
     if command is Command.CMD_READ_PARAMS_3:
         profile_id = kwargs.pop("profile_id", 0xFF)
+        pid_values = kwargs.pop("pid_values", False)
         gimbal._reject_remaining_arguments(command, kwargs)
-        return gimbal.read_profile_pid_values(profile_id)
+        return (
+            gimbal.read_profile_pid_values(profile_id)
+            if pid_values
+            else gimbal.read_params_3(profile_id)
+        )
+
+    if command is Command.CMD_WRITE_PARAMS_3:
+        parameters = gimbal._required_argument(command, kwargs, "parameters")
+        need_confirmation = kwargs.pop("need_confirmation", False)
+        gimbal._reject_remaining_arguments(command, kwargs)
+        return gimbal.write_params_3(parameters, need_confirmation=need_confirmation)
+
+    if command is Command.CMD_READ_PARAMS_EXT:
+        profile_id = kwargs.pop("profile_id", 0xFF)
+        gimbal._reject_remaining_arguments(command, kwargs)
+        return gimbal.read_params_ext(profile_id)
+
+    if command is Command.CMD_WRITE_PARAMS_EXT:
+        parameters = gimbal._required_argument(command, kwargs, "parameters")
+        need_confirmation = kwargs.pop("need_confirmation", False)
+        gimbal._reject_remaining_arguments(command, kwargs)
+        return gimbal.write_params_ext(parameters, need_confirmation=need_confirmation)
+
+    if command is Command.CMD_READ_PARAMS_EXT2:
+        profile_id = kwargs.pop("profile_id", 0xFF)
+        gimbal._reject_remaining_arguments(command, kwargs)
+        return gimbal.read_params_ext2(profile_id)
+
+    if command is Command.CMD_WRITE_PARAMS_EXT2:
+        parameters = gimbal._required_argument(command, kwargs, "parameters")
+        need_confirmation = kwargs.pop("need_confirmation", False)
+        gimbal._reject_remaining_arguments(command, kwargs)
+        return gimbal.write_params_ext2(parameters, need_confirmation=need_confirmation)
+
+    if command is Command.CMD_READ_PARAMS_EXT3:
+        profile_id = kwargs.pop("profile_id", 0xFF)
+        gimbal._reject_remaining_arguments(command, kwargs)
+        return gimbal.read_params_ext3(profile_id)
+
+    if command is Command.CMD_WRITE_PARAMS_EXT3:
+        parameters = gimbal._required_argument(command, kwargs, "parameters")
+        need_confirmation = kwargs.pop("need_confirmation", False)
+        gimbal._reject_remaining_arguments(command, kwargs)
+        return gimbal.write_params_ext3(parameters, need_confirmation=need_confirmation)
+
+    if command is Command.CMD_READ_PROFILE_NAMES:
+        gimbal._reject_remaining_arguments(command, kwargs)
+        return gimbal.read_profile_names()
+
+    if command is Command.CMD_WRITE_PROFILE_NAMES:
+        names = gimbal._required_argument(command, kwargs, "names")
+        need_confirmation = kwargs.pop("need_confirmation", False)
+        gimbal._reject_remaining_arguments(command, kwargs)
+        return gimbal.write_profile_names(names, need_confirmation=need_confirmation)
+
+    if command is Command.CMD_PROFILE_SET:
+        slot = gimbal._required_argument(command, kwargs, "slot")
+        action = gimbal._required_argument(command, kwargs, "action")
+        need_confirmation = kwargs.pop("need_confirmation", False)
+        confirm = kwargs.pop("confirm", False)
+        gimbal._reject_remaining_arguments(command, kwargs)
+        return gimbal.manage_profile_set(
+            slot, action, need_confirmation=need_confirmation, confirm=confirm
+        )
+
+    if command is Command.CMD_WRITE_PARAMS_SET:
+        action = gimbal._required_argument(command, kwargs, "action")
+        need_confirmation = kwargs.pop("need_confirmation", False)
+        gimbal._reject_remaining_arguments(command, kwargs)
+        return gimbal.set_profile_writing(action, need_confirmation=need_confirmation)
+
+    if command is Command.CMD_USE_DEFAULTS:
+        profile_id = kwargs.pop("profile_id", 0xFF)
+        confirm = kwargs.pop("confirm", False)
+        gimbal._reject_remaining_arguments(command, kwargs)
+        return gimbal.use_profile_defaults(profile_id, confirm=confirm)
+
+    if command is Command.CMD_EXT_IMU_DEBUG_INFO:
+        gimbal._reject_remaining_arguments(command, kwargs)
+        return gimbal.request_ext_imu_debug()
+
+    if command is Command.CMD_CALIB_INFO:
+        imu_type = kwargs.pop("imu_type", 1)
+        gimbal._reject_remaining_arguments(command, kwargs)
+        return gimbal.request_calib_info(imu_type)
+
+    calibration_methods = {
+        Command.CMD_CALIB_ACC: gimbal.calib_acc,
+        Command.CMD_CALIB_GYRO: gimbal.calib_gyro,
+        Command.CMD_CALIB_MAG: gimbal.calib_mag,
+        Command.CMD_CALIB_POLES: gimbal.calib_poles,
+        Command.CMD_CALIB_OFFSET: gimbal.calib_offset,
+        Command.CMD_ENCODERS_CALIB_FLD_OFFSET_4: gimbal.calib_encoders_fld_offset,
+    }
+    if command in calibration_methods:
+        gimbal._reject_remaining_arguments(command, kwargs)
+        return calibration_methods[command]()
+
+    if command is Command.CMD_ENCODERS_CALIB_OFFSET_4:
+        motor = kwargs.pop("motor", 255)
+        gimbal._reject_remaining_arguments(command, kwargs)
+        return gimbal.calib_encoders_offset(motor)
+
+    if command is Command.CMD_EXT_IMU_CMD:
+        command_id = gimbal._required_argument(command, kwargs, "command_id")
+        payload = kwargs.pop("payload", b"")
+        command_type = kwargs.pop("command_type", 0)
+        response_size = kwargs.pop("response_size", None)
+        gimbal._reject_remaining_arguments(command, kwargs)
+        return gimbal.send_ext_imu_command(
+            command_id, payload, command_type=command_type, response_size=response_size
+        )
+
+    if command is Command.CMD_EXT_SENS_CMD:
+        command_id = gimbal._required_argument(command, kwargs, "command_id")
+        payload = kwargs.pop("payload", b"")
+        flags = kwargs.pop("flags", 0)
+        command_type = kwargs.pop("command_type", 0)
+        response_size = kwargs.pop("response_size", None)
+        gimbal._reject_remaining_arguments(command, kwargs)
+        return gimbal.send_ext_sens_command(
+            command_id,
+            payload,
+            flags=flags,
+            command_type=command_type,
+            response_size=response_size,
+        )
+
+    if command is Command.CMD_GYRO_CORRECTION:
+        correction = gimbal._required_argument(command, kwargs, "correction")
+        gimbal._reject_remaining_arguments(command, kwargs)
+        return gimbal.correction_gyro(correction)
+
+    if command is Command.CMD_AHRS_HELPER:
+        mode = kwargs.pop("mode", 0)
+        helper = kwargs.pop("helper", None)
+        gimbal._reject_remaining_arguments(command, kwargs)
+        if mode & 1:
+            if helper is None:
+                raise ValueError("CMD_AHRS_HELPER SET mode requires helper")
+            return gimbal.set_ahrs_helper(helper, mode)
+        if helper is not None:
+            raise ValueError("CMD_AHRS_HELPER GET mode does not accept helper")
+        return gimbal.get_ahrs_helper(mode)
+
+    if command is Command.CMD_HELPER_DATA:
+        data = gimbal._required_argument(command, kwargs, "data")
+        gimbal._reject_remaining_arguments(command, kwargs)
+        from .types import HelperData, HelperDataExt
+
+        if isinstance(data, HelperDataExt):
+            return gimbal.provide_helper_data_ext(data)
+        if isinstance(data, HelperData):
+            return gimbal.provide_helper_data(data)
+        raise TypeError("data must be HelperData or HelperDataExt")
+
+    if command is Command.CMD_I2C_READ_REG_BUF:
+        device_address = gimbal._required_argument(command, kwargs, "device_address")
+        register_address = gimbal._required_argument(command, kwargs, "register_address")
+        size = gimbal._required_argument(command, kwargs, "size")
+        gimbal._reject_remaining_arguments(command, kwargs)
+        return gimbal.read_i2c_register(device_address, register_address, size)
+
+    if command is Command.CMD_I2C_WRITE_REG_BUF:
+        device_address = gimbal._required_argument(command, kwargs, "device_address")
+        register_address = gimbal._required_argument(command, kwargs, "register_address")
+        data = gimbal._required_argument(command, kwargs, "data")
+        need_confirmation = kwargs.pop("need_confirmation", False)
+        gimbal._reject_remaining_arguments(command, kwargs)
+        return gimbal.write_i2c_register(
+            device_address, register_address, data, need_confirmation=need_confirmation
+        )
+
+    if command is Command.CMD_EEPROM_READ:
+        address = gimbal._required_argument(command, kwargs, "address")
+        size = kwargs.pop("size", 64)
+        gimbal._reject_remaining_arguments(command, kwargs)
+        return gimbal.read_eeprom(address, size)
+
+    if command is Command.CMD_EEPROM_WRITE:
+        address = gimbal._required_argument(command, kwargs, "address")
+        data = gimbal._required_argument(command, kwargs, "data")
+        need_confirmation = kwargs.pop("need_confirmation", False)
+        gimbal._reject_remaining_arguments(command, kwargs)
+        return gimbal.write_eeprom(address, data, need_confirmation=need_confirmation)
+
+    if command is Command.CMD_READ_EXTERNAL_DATA:
+        gimbal._reject_remaining_arguments(command, kwargs)
+        return gimbal.read_external_data()
+
+    if command is Command.CMD_WRITE_EXTERNAL_DATA:
+        data = gimbal._required_argument(command, kwargs, "data")
+        need_confirmation = kwargs.pop("need_confirmation", False)
+        gimbal._reject_remaining_arguments(command, kwargs)
+        return gimbal.write_external_data(data, need_confirmation=need_confirmation)
+
+    if command is Command.CMD_READ_FILE:
+        file_id = gimbal._required_argument(command, kwargs, "file_id")
+        page_offset = kwargs.pop("page_offset", 0)
+        max_size = kwargs.pop("max_size", 240)
+        gimbal._reject_remaining_arguments(command, kwargs)
+        return gimbal.read_file(file_id, page_offset, max_size)
+
+    if command is Command.CMD_WRITE_FILE:
+        file_id = gimbal._required_argument(command, kwargs, "file_id")
+        data = gimbal._required_argument(command, kwargs, "data")
+        page_offset = kwargs.pop("page_offset", 0)
+        need_confirmation = kwargs.pop("need_confirmation", False)
+        gimbal._reject_remaining_arguments(command, kwargs)
+        return gimbal.write_file(
+            file_id, data, page_offset=page_offset, need_confirmation=need_confirmation
+        )
+
+    if command is Command.CMD_FS_CLEAR_ALL:
+        confirm = kwargs.pop("confirm", False)
+        gimbal._reject_remaining_arguments(command, kwargs)
+        return gimbal.clear_file_system(confirm=confirm)
 
     if command is Command.CMD_READ_RC_INPUTS:
         sources = gimbal._required_argument(command, kwargs, "sources")
@@ -134,7 +360,8 @@ def execute(gimbal: SimpleBGC, command: Command | int, **kwargs: object) -> obje
         gimbal._reject_remaining_arguments(command, kwargs)
         return (
             gimbal.start_data_stream(config, need_confirmation=need_confirmation)
-            if start else gimbal.stop_data_stream(config, need_confirmation=need_confirmation)
+            if start
+            else gimbal.stop_data_stream(config, need_confirmation=need_confirmation)
         )
 
     if command is Command.CMD_DEBUG_VARS_INFO_3:
@@ -185,7 +412,9 @@ def execute(gimbal: SimpleBGC, command: Command | int, **kwargs: object) -> obje
         if target is None and payload is None:
             return gimbal.read_transparent_command(max_payload_size)
         if target is None or payload is None:
-            raise TypeError("CMD_TRANSPARENT_SAPI requires target=... and payload=..., or neither to read")
+            raise TypeError(
+                "CMD_TRANSPARENT_SAPI requires target=... and payload=..., or neither to read"
+            )
         return gimbal.send_transparent_command(target, payload)
 
     if command is Command.CMD_EXT_MOTORS_STATE:
@@ -289,7 +518,9 @@ def execute(gimbal: SimpleBGC, command: Command | int, **kwargs: object) -> obje
         gimbal._reject_remaining_arguments(command, kwargs)
         if confirm_on_start is not None or confirm_on_finish is not None:
             if need_confirmation:
-                raise TypeError("CMD_EXECUTE_MENU accepts need_confirmation=... or extended confirmation flags")
+                raise TypeError(
+                    "CMD_EXECUTE_MENU accepts need_confirmation=... or extended confirmation flags"
+                )
             return gimbal.execute_menu_ext(
                 menu_command,
                 confirm_on_start=False if confirm_on_start is None else confirm_on_start,
@@ -344,7 +575,9 @@ def execute(gimbal: SimpleBGC, command: Command | int, **kwargs: object) -> obje
         data_set = kwargs.pop("data_set", 0)
         need_confirmation = kwargs.pop("need_confirmation", False)
         gimbal._reject_remaining_arguments(command, kwargs)
-        return gimbal.control_ext_motors(control, motors, data_set, need_confirmation=need_confirmation)
+        return gimbal.control_ext_motors(
+            control, motors, data_set, need_confirmation=need_confirmation
+        )
 
     if command is Command.CMD_EXT_MOTORS_CONTROL_CONFIG:
         config = gimbal._required_argument(command, kwargs, "config")

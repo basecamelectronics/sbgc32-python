@@ -1,6 +1,7 @@
+from collections.abc import Mapping
 from dataclasses import dataclass
 from enum import IntEnum, IntFlag
-from typing import Mapping
+
 
 class SerialApiStatus(IntEnum):
     TX_RX_OK = 0
@@ -57,6 +58,57 @@ class TransparentCommandFlag(IntFlag):
     BLOCK_AND_WAIT = 1 << 6
 
 
+class EepromFileId(IntEnum):
+    SCRIPT = 1
+    IMU_CALIB = 3
+    COGGING_CORRECTION = 4
+    ADJ_VAR_LUT = 5
+    PROFILE_SET = 6
+    PARAMS = 7
+    TUNE = 8
+    CAN_DRIVER = 10
+
+
+class ProfileId(IntEnum):
+    PROFILE_1 = 0
+    PROFILE_2 = 1
+    PROFILE_3 = 2
+    PROFILE_4 = 3
+    PROFILE_5 = 4
+    CURRENT = 0xFF
+
+
+class ProfileSet(IntEnum):
+    SET_1 = 1
+    SET_2 = 2
+    SET_3 = 3
+    SET_4 = 4
+    SET_5 = 5
+    BACKUP = 6
+
+
+class ProfileSetAction(IntEnum):
+    SAVE = 1
+    CLEAR = 2
+    LOAD = 3
+
+
+class ProfileWritingAction(IntEnum):
+    STOP = 0
+    START = 1
+
+
+class ExternalImuCommandType(IntEnum):
+    TX = 0
+    RX = 1
+    TX_RX = 2
+
+
+class ExternalSensorCommandFlag(IntFlag):
+    LOW_PRIORITY = 0
+    HIGH_PRIORITY = 1
+
+
 def transparent_command_target(
     port: TransparentCommandPort | int,
     device: TransparentCommandDevice | int,
@@ -81,14 +133,15 @@ def transparent_command_target(
 
 
 class MotorsOffMode(IntEnum):
-    """ Stopping mode accepted by CMD_MOTORS_OFF """
+    """Stopping mode accepted by CMD_MOTORS_OFF"""
+
     NORMAL = 0
     BREAK = 1
     SAFE_STOP = 2
 
 
 class BeeperMode(IntFlag):
-    """ Standard CMD_BEEP_SOUND signals; CUSTOM_MELODY is a motor-sound melody. """
+    """Standard CMD_BEEP_SOUND signals; CUSTOM_MELODY is a motor-sound melody."""
 
     CALIBRATE = 1 << 0
     CONFIRM = 1 << 1
@@ -148,19 +201,19 @@ class DebugPortAction(IntEnum):
 class DebugPortFilter(IntFlag):
     """Packet classes excluded from Debug Port output (zero forwards all)."""
 
-    REALTIME_DATA_3             = 1 << 0
-    REALTIME_DATA_4             = 1 << 1
-    REALTIME_DATA_CUSTOM        = 1 << 2
-    DEBUG_VARS_3                = 1 << 3
-    MAVLINK_DEBUG               = 1 << 4
-    GET_ANGLES                  = 1 << 5
-    GET_ANGLES_EXT              = 1 << 6
-    BODE_TEST_DATA              = 1 << 7
-    HELPER_DATA                 = 1 << 8
-    AHRS_HELPER                 = 1 << 9
-    GYRO_CORRECTION             = 1 << 10
-    CONTROL                     = 1 << 11
-    SET_ADJ_VARS                = 1 << 12
+    REALTIME_DATA_3 = 1 << 0
+    REALTIME_DATA_4 = 1 << 1
+    REALTIME_DATA_CUSTOM = 1 << 2
+    DEBUG_VARS_3 = 1 << 3
+    MAVLINK_DEBUG = 1 << 4
+    GET_ANGLES = 1 << 5
+    GET_ANGLES_EXT = 1 << 6
+    BODE_TEST_DATA = 1 << 7
+    HELPER_DATA = 1 << 8
+    AHRS_HELPER = 1 << 9
+    GYRO_CORRECTION = 1 << 10
+    CONTROL = 1 << 11
+    SET_ADJ_VARS = 1 << 12
     API_VIRTUAL_CHANNEL_CONTROL = 1 << 13
     API_VIRTUAL_CHANNEL_HIGH_RES = 1 << 14
 
@@ -239,7 +292,9 @@ class AutoPid2Config:
     command_flags: int = 0
     config_version: int = 1
     axes: tuple[AutoPid2Axis, AutoPid2Axis, AutoPid2Axis] = (
-        AutoPid2Axis(), AutoPid2Axis(), AutoPid2Axis(),
+        AutoPid2Axis(),
+        AutoPid2Axis(),
+        AutoPid2Axis(),
     )
     general_flags: int = 0
     test_frequency_from: float = 0.0
@@ -277,7 +332,7 @@ class PidValues:
 
 @dataclass(frozen=True, slots=True)
 class SyncMotorsConfig:
-    """ Power pulse used by CMD_SYNC_MOTORS; it moves the selected motor. """
+    """Power pulse used by CMD_SYNC_MOTORS; it moves the selected motor."""
 
     axis: SyncMotorAxis | int
     power: int
@@ -286,21 +341,21 @@ class SyncMotorsConfig:
 
 
 class ControlMode(IntEnum):
-    """ Low four bits of one CMD_CONTROL axis mode byte """
+    """Low four bits of one CMD_CONTROL axis mode byte"""
 
-    NO_CONTROL                  = 0 # Give back control to RC
-    SPEED                       = 1 # Continuous rotation
-    ANGLE                       = 2 # Absolute angle
-    SPEED_ANGLE                 = 3 # Speed with position correction
-    RC                          = 4 # RC signal
-    ANGLE_REL_FRAME             = 5 # Angle relative frame IMU
-    RC_HIGH_RES                 = 6 # RC signal
-    IGNORE                      = 7 # Do not change axis
-    ANGLE_SHORTEST              = 8 # Shortest path to angle
+    NO_CONTROL = 0  # Give back control to RC
+    SPEED = 1  # Continuous rotation
+    ANGLE = 2  # Absolute angle
+    SPEED_ANGLE = 3  # Speed with position correction
+    RC = 4  # RC signal
+    ANGLE_REL_FRAME = 5  # Angle relative frame IMU
+    RC_HIGH_RES = 6  # RC signal
+    IGNORE = 7  # Do not change axis
+    ANGLE_SHORTEST = 8  # Shortest path to angle
 
 
 class ControlFlag(IntFlag):
-    """ High four bits that may be ORed with :class:ControlMode """
+    """High four bits that may be ORed with :class:ControlMode"""
 
     MIX_FOLLOW = 1 << 4
     TARGET_PRECISE = 1 << 5
@@ -310,7 +365,7 @@ class ControlFlag(IntFlag):
 
 
 class ControlConfigFlag(IntFlag):
-    """ Additional CMD_CONTROL_CONFIG rules, except confirmation selection. """
+    """Additional CMD_CONTROL_CONFIG rules, except confirmation selection."""
 
     NO_CONFIRM = 1 << 0
     SERVO_MODE_ENABLE = 1 << 1
@@ -448,7 +503,7 @@ class ExternalMotorsControlConfig:
 
 @dataclass(frozen=True, slots=True)
 class ControlAxisConfig:
-    """ Filtering and motion-profile rules for one CMD_CONTROL axis. """
+    """Filtering and motion-profile rules for one CMD_CONTROL axis."""
 
     angle_lpf: int = 0
     speed_lpf: int = 0
@@ -459,7 +514,7 @@ class ControlAxisConfig:
 
 @dataclass(frozen=True, slots=True)
 class ControlConfig:
-    """ Rules used by CMD_CONTROL_CONFIG for roll, pitch, and yaw. """
+    """Rules used by CMD_CONTROL_CONFIG for roll, pitch, and yaw."""
 
     timeout_ms: int = 0
     channel_priorities: tuple[int, int, int, int, int] = (0, 0, 0, 0, 0)
@@ -474,61 +529,61 @@ class ControlConfig:
 
 
 class ConfirmationStatus(IntEnum):
-    """ Status of a CMD_CONFIRM request """
+    """Status of a CMD_CONFIRM request"""
 
     NOT_RECEIVED = 0
     RECEIVED = 1
     ERROR = 2
 
 
-class RcInputSource (IntEnum):
-    NO_SIGNAL                   = 0
-    ROLL                        = 1
-    PITCH                       = 2
-    EXTERNAL_FC_ROLL            = 3
-    EXTERNAL_FC_PITCH           = 4
-    YAW                         = 5
+class RcInputSource(IntEnum):
+    NO_SIGNAL = 0
+    ROLL = 1
+    PITCH = 2
+    EXTERNAL_FC_ROLL = 3
+    EXTERNAL_FC_PITCH = 4
+    YAW = 5
 
-    ADC_1                       = 0x21
-    ADC_2                       = 0x22
-    ADC_3                       = 0x23
-    ADC_4                       = 0x24
+    ADC_1 = 0x21
+    ADC_2 = 0x22
+    ADC_3 = 0x23
+    ADC_4 = 0x24
 
-    SERIAL_VIRTUAL_1            = 0x41
-    API_VIRTUAL_1               = 0x81
-    API_VIRTUAL_2               = 0x82
-    API_VIRTUAL_3               = 0x83
-    API_VIRTUAL_4               = 0x84
-    API_VIRTUAL_5               = 0x85
-    API_VIRTUAL_6               = 0x86
-    API_VIRTUAL_7               = 0x87
-    API_VIRTUAL_8               = 0x88
-    API_VIRTUAL_9               = 0x89
-    API_VIRTUAL_10              = 0x8A
-    API_VIRTUAL_11              = 0x8B
-    API_VIRTUAL_12              = 0x8C
-    API_VIRTUAL_13              = 0x8D
-    API_VIRTUAL_14              = 0x8E
-    API_VIRTUAL_15              = 0x8F
-    API_VIRTUAL_16              = 0x90
-    API_VIRTUAL_17              = 0x91
-    API_VIRTUAL_18              = 0x92
-    API_VIRTUAL_19              = 0x93
-    API_VIRTUAL_20              = 0x94
-    API_VIRTUAL_21              = 0x95
-    API_VIRTUAL_22              = 0x96
-    API_VIRTUAL_23              = 0x97
-    API_VIRTUAL_24              = 0x98
-    API_VIRTUAL_25              = 0x99
-    API_VIRTUAL_26              = 0x9A
-    API_VIRTUAL_27              = 0x9B
-    API_VIRTUAL_28              = 0x9C
-    API_VIRTUAL_29              = 0x9D
-    API_VIRTUAL_30              = 0x9E
-    API_VIRTUAL_31              = 0x9F
-    API_VIRTUAL_32              = 0xA0
+    SERIAL_VIRTUAL_1 = 0x41
+    API_VIRTUAL_1 = 0x81
+    API_VIRTUAL_2 = 0x82
+    API_VIRTUAL_3 = 0x83
+    API_VIRTUAL_4 = 0x84
+    API_VIRTUAL_5 = 0x85
+    API_VIRTUAL_6 = 0x86
+    API_VIRTUAL_7 = 0x87
+    API_VIRTUAL_8 = 0x88
+    API_VIRTUAL_9 = 0x89
+    API_VIRTUAL_10 = 0x8A
+    API_VIRTUAL_11 = 0x8B
+    API_VIRTUAL_12 = 0x8C
+    API_VIRTUAL_13 = 0x8D
+    API_VIRTUAL_14 = 0x8E
+    API_VIRTUAL_15 = 0x8F
+    API_VIRTUAL_16 = 0x90
+    API_VIRTUAL_17 = 0x91
+    API_VIRTUAL_18 = 0x92
+    API_VIRTUAL_19 = 0x93
+    API_VIRTUAL_20 = 0x94
+    API_VIRTUAL_21 = 0x95
+    API_VIRTUAL_22 = 0x96
+    API_VIRTUAL_23 = 0x97
+    API_VIRTUAL_24 = 0x98
+    API_VIRTUAL_25 = 0x99
+    API_VIRTUAL_26 = 0x9A
+    API_VIRTUAL_27 = 0x9B
+    API_VIRTUAL_28 = 0x9C
+    API_VIRTUAL_29 = 0x9D
+    API_VIRTUAL_30 = 0x9E
+    API_VIRTUAL_31 = 0x9F
+    API_VIRTUAL_32 = 0xA0
 
-    STEP_SIGNAL_1               = 0xA1
+    STEP_SIGNAL_1 = 0xA1
 
 
 @dataclass(frozen=True, slots=True)
@@ -546,6 +601,49 @@ class ImuType(IntEnum):
     CURRENTLY_ACTIVE = 0
     MAIN = 1
     FRAME = 2
+
+
+class AhrsHelperDirection(IntEnum):
+    GET = 0
+    SET = 1
+
+
+class AhrsHelperLocation(IntEnum):
+    CAMERA_PLATFORM = 0
+    FRAME = 1 << 1
+
+
+class AhrsHelperCorrection(IntEnum):
+    BOTH_VECTORS = 0
+    Z_VECTOR = 1 << 4
+    H_VECTOR = 1 << 5
+
+
+class AhrsHelperTranslation(IntEnum):
+    BOTH_VECTORS = 0
+    Z_VECTOR = 1 << 6
+    H_VECTOR = 1 << 7
+
+
+class AhrsHelperReference(IntEnum):
+    SAME_AS_FRAME_IMU = 0
+    ON_THE_FRAME = 1 << 8
+    BELOW_OUTER = 1 << 9
+
+
+class AhrsHelperOption(IntFlag):
+    NONE = 0
+    USE_AS_REFERENCE_ONLY = 1 << 2
+    TRANSLATE_FROM_CAMERA_TO_FRAME = 1 << 3
+    DISABLE_INTERNAL_CORRECTION = 1 << 10
+
+
+class HelperDataFlag(IntFlag):
+    COORD_SYS_GROUND_YAW_ROTATED = 1
+    COORD_SYS_GROUND = 2
+    COORD_SYS_FRAME = 3
+    COMPUTED_IN_EULER_ORDER = 1 << 6
+    FRAME_HEADING = 1 << 7
 
 
 class SelectImuAction(IntEnum):
@@ -625,9 +723,10 @@ class DataStreamConfig:
     sync_to_data: bool = False
     # and 9 reserved bytes
 
+
 @dataclass(frozen=True, slots=True)
 class CommandConfirmation:
-    """ CMD_CONFIRM or CMD_ERROR received for a previously sent command """
+    """CMD_CONFIRM or CMD_ERROR received for a previously sent command"""
 
     command_id: int
     status: ConfirmationStatus
@@ -638,7 +737,7 @@ class CommandConfirmation:
 
 @dataclass(frozen=True, slots=True)
 class AdjustableVariable:
-    """ One integer adjustable variable used by CMD_SET/GET_ADJ_VARS_VAL.
+    """One integer adjustable variable used by CMD_SET/GET_ADJ_VARS_VAL.
 
     id is the firmware-specific adjustable-variable ID and value is
     the raw signed 32-bit value used by the board. The command changes RAM only.
@@ -695,7 +794,7 @@ class AdjustableVariableInfo:
 
 @dataclass(frozen=True, slots=True)
 class ControlAxis:
-    """ One CMD_CONTROL axis using degrees and degrees per second.
+    """One CMD_CONTROL axis using degrees and degrees per second.
 
     angle is converted to the 16-bit SerialAPI angle representation and
     speed to its standard speed representation by SimpleBGC.control.
@@ -709,7 +808,7 @@ class ControlAxis:
 
 
 class RealtimeDataCustomFlag(IntFlag):
-    """ Fields requested through CMD_REALTIME_DATA_CUSTOM. """
+    """Fields requested through CMD_REALTIME_DATA_CUSTOM."""
 
     IMU_ANGLES = 1 << 0
     TARGET_ANGLES = 1 << 1
@@ -743,7 +842,7 @@ class RealtimeDataCustomFlag(IntFlag):
 
 @dataclass(frozen=True, slots=True)
 class Axis3:
-    """ Values for roll, pitch, and yaw. """
+    """Values for roll, pitch, and yaw."""
 
     roll: float
     pitch: float
@@ -752,7 +851,8 @@ class Axis3:
 
 @dataclass(frozen=True, slots=True)
 class Angles:
-    """ Class for angles """ 
+    """Class for angles"""
+
     imu: Axis3
     target: Axis3
     target_speed: Axis3
@@ -760,7 +860,7 @@ class Angles:
 
 @dataclass(frozen=True, slots=True)
 class AxisGAE:
-    """ CMD_GET_ANGLES_EXT result. """
+    """CMD_GET_ANGLES_EXT result."""
 
     imu_angle: int
     target_angle: int
@@ -780,10 +880,8 @@ class AxisGAE:
         return self.frame_cam_angle
 
 
-
 @dataclass(frozen=True, slots=True)
 class AnglesExt:
-
     axis_gae: tuple[AxisGAE, AxisGAE, AxisGAE]
 
     @property
@@ -805,7 +903,7 @@ class AnglesExt:
 
 @dataclass(frozen=True, slots=True)
 class ScriptDebugInfo:
-    """ CMD_SCRIPT_DEBUG result. """
+    """CMD_SCRIPT_DEBUG result."""
 
     current_command_counter: int
     error_code: int
@@ -821,7 +919,7 @@ class ScriptDebugInfo:
 
 @dataclass(frozen=True, slots=True)
 class AxisRealtimeData:
-    """ One raw sbgcAxisRTD_t record. """
+    """One raw sbgcAxisRTD_t record."""
 
     acc_data: int
     gyro_data: int
@@ -829,7 +927,6 @@ class AxisRealtimeData:
 
 @dataclass(frozen=True, slots=True)
 class RealtimeDataCustom:
-
     flags: RealtimeDataCustomFlag
     timestamp_ms: int
     fields: Mapping[RealtimeDataCustomFlag, object]
@@ -838,7 +935,6 @@ class RealtimeDataCustom:
 
 @dataclass(frozen=True, slots=True)
 class RealtimeData3:
-
     axis_rtd: tuple[AxisRealtimeData, AxisRealtimeData, AxisRealtimeData]
     serial_error_count: int
     system_error: int
@@ -865,7 +961,6 @@ class RealtimeData3:
 
 @dataclass(frozen=True, slots=True)
 class RealtimeData4(RealtimeData3):
-
     frame_cam_angle: tuple[int, int, int]
     reserved1: int
     balance_error: tuple[int, int, int]
@@ -885,7 +980,6 @@ class RealtimeData4(RealtimeData3):
 
 @dataclass(frozen=True, slots=True)
 class BoardInfo:
-
     board_ver: int
     firmware_ver: int
     state_flags: int
@@ -916,7 +1010,7 @@ class BoardInfo:
 
 @dataclass(frozen=True, slots=True)
 class BoardInfo3:
-    """Extended board information returned by CMD_BOARD_INFO_3. """
+    """Extended board information returned by CMD_BOARD_INFO_3."""
 
     device_id: bytes
     mcu_id: bytes
@@ -934,17 +1028,124 @@ class BoardInfo3:
 
 
 @dataclass(frozen=True, slots=True)
-class CanModuleInfo:
+class EepromFile:
+    file_id: int
+    page_offset: int
+    data: bytes
+    error_code: int
 
+
+@dataclass(frozen=True, slots=True)
+class ProfileParameters:
+    params_3: bytes
+    params_ext: bytes
+    params_ext2: bytes
+    params_ext3: bytes
+
+
+@dataclass(frozen=True, slots=True)
+class ExternalImuDebugInfo:
+    main_imu_ref_src: int
+    frame_imu_ref_src: int
+    main_imu_z_ref_error: int
+    main_imu_h_ref_error: int
+    frame_imu_z_ref_error: int
+    frame_imu_h_ref_error: int
+    external_imu_status: int
+    packets_received: int
+    parse_error_count: int
+    external_heading_correction: int
+    external_attitude_correction: int
+    dcm: tuple[float, ...]
+    acceleration_body: tuple[float, float, float]
+
+
+@dataclass(frozen=True, slots=True)
+class CalibInfo:
+    progress: int
+    imu_type: ImuType
+    acceleration: tuple[int, int, int]
+    gyro_amplitude: int
+    current_axis: int
+    limits_info: int
+    temperature_celsius: int
+    temperature_gyro_enabled: bool
+    temperature_gyro_min_celsius: int
+    temperature_gyro_max_celsius: int
+    temperature_acc_enabled: bool
+    temperature_acc_slots: tuple[int, int, int, int, int, int]
+    temperature_acc_min_celsius: int
+    temperature_acc_max_celsius: int
+    heading_error_length: int
+
+
+class CalibCoggingAction(IntEnum):
+    CALIBRATE = 1
+    DELETE_CALIBRATION_DATA = 2
+
+
+class CalibCoggingAxis(IntFlag):
+    ROLL = 1
+    PITCH = 2
+    YAW = 4
+
+
+@dataclass(frozen=True, slots=True)
+class CalibCoggingAxisConfig:
+    angle: int
+    smooth: int
+    speed: int
+    period: int = 0
+
+
+@dataclass(frozen=True, slots=True)
+class CalibCogging:
+    action: CalibCoggingAction
+    axes: CalibCoggingAxis
+    axis_config: tuple[CalibCoggingAxisConfig, CalibCoggingAxisConfig, CalibCoggingAxisConfig]
+    iterations: int
+
+
+@dataclass(frozen=True, slots=True)
+class GyroCorrection:
+    imu_type: ImuType
+    zero_correction: tuple[int, int, int]
+    zero_heading_correction: int = 0
+
+
+@dataclass(frozen=True, slots=True)
+class AhrsHelper:
+    z_vector: tuple[float, float, float]
+    h_vector: tuple[float, float, float]
+
+
+@dataclass(frozen=True, slots=True)
+class HelperData:
+    frame_acceleration: tuple[int, int, int]
+    frame_angle_roll: int = 0
+    frame_angle_pitch: int = 0
+
+
+@dataclass(frozen=True, slots=True)
+class HelperDataExt:
+    frame_acceleration: tuple[int, int, int]
+    frame_angle_roll: int = 0
+    frame_angle_pitch: int = 0
+    flags: HelperDataFlag = HelperDataFlag.COORD_SYS_GROUND_YAW_ROTATED
+    frame_speed: tuple[int, int, int] = (0, 0, 0)
+    frame_heading: int = 0
+
+
+@dataclass(frozen=True, slots=True)
+class CanModuleInfo:
     can_id: int
     board_ver: int
     bootloader_ver: int
     firmware_ver: int
-    	
+
 
 @dataclass(frozen=True, slots=True)
 class CanDeviceScan:
-
     uid: bytes
     can_id: int
     can_type: int
@@ -952,7 +1153,6 @@ class CanDeviceScan:
 
 @dataclass(frozen=True, slots=True)
 class MenuExecutionResult:
-
     started: CommandConfirmation | None = None
     finished: CommandConfirmation | None = None
 

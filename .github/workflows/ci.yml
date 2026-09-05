@@ -1,0 +1,84 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  pyserial:
+    name: Pyserial / ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-latest, ubuntu-latest, macos-latest]
+
+    env:
+      SBGC32_WHEEL_BACKEND: pyserial
+      SBGC32_VERSION: 0.0.0.dev0
+
+    steps:
+      - name: Get source code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.10"
+
+      - name: Install checking tools
+        run: python -m pip install --upgrade pip build twine ruff
+
+      - name: Check code with Ruff
+        run: python -m ruff check src examples
+
+      - name: Check formatting
+        run: python -m ruff format --check src examples
+
+      - name: Configure native library on Windows
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: cmake -S native -B build/native -A x64
+
+      - name: Configure native library on Linux and macOS
+        if: runner.os != 'Windows'
+        run: cmake -S native -B build/native -DCMAKE_BUILD_TYPE=Release
+
+      - name: Build native library
+        run: cmake --build build/native --config Release
+
+      - name: Build wheel
+        run: python -m build --wheel --outdir dist
+
+      - name: Validate wheel metadata
+        run: python -m twine check dist/*
+
+      - name: Install built wheel
+        run: >-
+          python -c
+          "import glob, subprocess, sys;
+          subprocess.check_call([
+              sys.executable, '-m', 'pip', 'install',
+              '--force-reinstall', *glob.glob('dist/*.whl')
+          ])"
+
+      - name: Smoke-test installed package
+        run: >-
+          python -c
+          "import sbgc32;
+          from sbgc32.backends.pyserial import PySerialBackend;
+          PySerialBackend();
+          print('Package and native pyserial library: OK')"
+
+      - name: Save wheel as build artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: sbgc32-pyserial-${{ matrix.os }}
+          path: dist/*.whl
+          if-no-files-found: error

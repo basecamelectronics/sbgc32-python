@@ -2,4 +2,11 @@
 requires = ["setuptools>=68", "wheel"]
 build-backend = "setuptools.build_meta"
 
+[tool.ruff]
+target-version = "py310"
+line-length = 100
+
+[tool.ruff.lint]
+select = ["E4", "E7", "E9", "F", "I", "W"]
+
 # Metadata and package contents are selected by setup.py from SBGC32_WHEEL_BACKEND: native_c or pyserial.

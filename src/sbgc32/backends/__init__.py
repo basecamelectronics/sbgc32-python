@@ -3,7 +3,7 @@ from .pyserial import PySerialBackend
 
 
 def create_backend(name: str) -> NativeWinBackend | PySerialBackend:
-    """ Create the selected transport backend. """
+    """Create the selected transport backend."""
     if name == "native_win":
         return NativeWinBackend()
     if name == "pyserial":

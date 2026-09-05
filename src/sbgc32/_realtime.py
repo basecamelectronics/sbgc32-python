@@ -1,22 +1,33 @@
 from __future__ import annotations
 
-import struct
 import ctypes
+import struct
+from collections.abc import Sequence
 from types import MappingProxyType
 
 from sbgc32._serial_api_library import NativeDataStreamInterval, NativeDebugVarInfo3
 
-from collections.abc import Sequence
-
 from ._control import make_confirmation
 from ._service import format_table
-from .native import NativeError
-
 from .types import (
-    Angles, AnglesExt, Axis3, AxisGAE, AxisRealtimeData, DataStreamCommand, DataStreamConfig,
-    RealtimeData3, RealtimeData4, RealtimeDataCustom, RealtimeDataCustomFlag,
-    CommandConfirmation, ControlQuatMode, ControlQuatStatus, ControlQuatStatusFlag,
-    DebugVarInfo, ImuType, SelectImuAction,
+    Angles,
+    AnglesExt,
+    Axis3,
+    AxisGAE,
+    AxisRealtimeData,
+    CommandConfirmation,
+    ControlQuatMode,
+    ControlQuatStatus,
+    ControlQuatStatusFlag,
+    DataStreamCommand,
+    DataStreamConfig,
+    DebugVarInfo,
+    ImuType,
+    RealtimeData3,
+    RealtimeData4,
+    RealtimeDataCustom,
+    RealtimeDataCustomFlag,
+    SelectImuAction,
 )
 
 
@@ -26,26 +37,50 @@ def get_angles(self) -> Angles:
     return Angles(
         imu=Axis3(result.imu.roll, result.imu.pitch, result.imu.yaw),
         target=Axis3(result.target.roll, result.target.pitch, result.target.yaw),
-        target_speed=Axis3(result.target_speed.roll, result.target_speed.pitch, result.target_speed.yaw),
+        target_speed=Axis3(
+            result.target_speed.roll, result.target_speed.pitch, result.target_speed.yaw
+        ),
     )
 
 
 def get_angles_ext(self) -> AnglesExt:
     self._ensure_open()
     result = self._native.get_angles_ext(self._device)
-    return AnglesExt(axis_gae=tuple(AxisGAE(
-        imu_angle=axis.imu_angle, target_angle=axis.target_angle,
-        frame_cam_angle=axis.frame_cam_angle, reserved=bytes(axis.reserved),
-    ) for axis in result.axis_gae))
+    return AnglesExt(
+        axis_gae=tuple(
+            AxisGAE(
+                imu_angle=axis.imu_angle,
+                target_angle=axis.target_angle,
+                frame_cam_angle=axis.frame_cam_angle,
+                reserved=bytes(axis.reserved),
+            )
+            for axis in result.axis_gae
+        )
+    )
 
 
 def format_angles(angles: Angles) -> str:
     if not isinstance(angles, Angles):
         raise TypeError("angles must be Angles")
     rows = (
-        ("Roll", f"{angles.imu.roll:.3f}", f"{angles.target.roll:.3f}", f"{angles.target_speed.roll:.3f}"),
-        ("Pitch", f"{angles.imu.pitch:.3f}", f"{angles.target.pitch:.3f}", f"{angles.target_speed.pitch:.3f}"),
-        ("Yaw", f"{angles.imu.yaw:.3f}", f"{angles.target.yaw:.3f}", f"{angles.target_speed.yaw:.3f}"),
+        (
+            "Roll",
+            f"{angles.imu.roll:.3f}",
+            f"{angles.target.roll:.3f}",
+            f"{angles.target_speed.roll:.3f}",
+        ),
+        (
+            "Pitch",
+            f"{angles.imu.pitch:.3f}",
+            f"{angles.target.pitch:.3f}",
+            f"{angles.target_speed.pitch:.3f}",
+        ),
+        (
+            "Yaw",
+            f"{angles.imu.yaw:.3f}",
+            f"{angles.target.yaw:.3f}",
+            f"{angles.target_speed.yaw:.3f}",
+        ),
     )
     return format_table(("Axis", "IMU, deg", "Target, deg", "Target speed, deg/s"), rows)
 
@@ -91,10 +126,15 @@ def format_realtime_data(data: RealtimeData3 | RealtimeData4) -> str:
             ("Frame IMU temperature", str(data.frame_imu_temperature)),
             ("System state flags", f"0x{data.system_state_flags:04X}"),
         )
-    return "\n\n".join((
-        format_table(("Axis", "IMU", "Frame IMU", "Target", "Motor", "ACC", "Gyro"), axis_rows),
-        format_table(("Field", "Value"), general_rows),
-    ))
+    return "\n\n".join(
+        (
+            format_table(
+                ("Axis", "IMU", "Frame IMU", "Target", "Motor", "ACC", "Gyro"),
+                axis_rows,
+            ),
+            format_table(("Field", "Value"), general_rows),
+        )
+    )
 
 
 def format_control_quat_status(status: ControlQuatStatus) -> str:
@@ -116,22 +156,44 @@ def format_control_quat_status(status: ControlQuatStatus) -> str:
         ("Actual speed", status.actual_speed_raw),
     ):
         if value is not None:
-            rows.append((name, ", ".join(f"{item:g}" if isinstance(item, float) else str(item) for item in value)))
+            rows.append(
+                (
+                    name,
+                    ", ".join(
+                        f"{item:g}" if isinstance(item, float) else str(item) for item in value
+                    ),
+                )
+            )
     return format_table(("Field", "Value"), tuple(rows))
 
 
 def make_realtime_data_3(result) -> RealtimeData3:
     return RealtimeData3(
-        axis_rtd=tuple(AxisRealtimeData(acc_data=axis.acc_data, gyro_data=axis.gyro_data) for axis in result.axis_rtd),
-        serial_error_count=result.serial_error_count, system_error=result.system_error,
-        system_sub_error=result.system_sub_error, reserved=bytes(result.reserved),
-        rc_roll=result.rc_roll, rc_pitch=result.rc_pitch, rc_yaw=result.rc_yaw, rc_cmd=result.rc_cmd,
-        ext_fc_roll=result.ext_fc_roll, ext_fc_pitch=result.ext_fc_pitch,
-        imu_angle=tuple(result.imu_angle), frame_imu_angle=tuple(result.frame_imu_angle),
-        target_angle=tuple(result.target_angle), cycle_time=result.cycle_time,
-        i2c_error_count=result.i2c_error_count, error_code=result.error_code,
-        bat_level=result.bat_level, rt_data_flags=result.rt_data_flags, cur_imu=result.cur_imu,
-        cur_profile=result.cur_profile, motor_power=tuple(result.motor_power),
+        axis_rtd=tuple(
+            AxisRealtimeData(acc_data=axis.acc_data, gyro_data=axis.gyro_data)
+            for axis in result.axis_rtd
+        ),
+        serial_error_count=result.serial_error_count,
+        system_error=result.system_error,
+        system_sub_error=result.system_sub_error,
+        reserved=bytes(result.reserved),
+        rc_roll=result.rc_roll,
+        rc_pitch=result.rc_pitch,
+        rc_yaw=result.rc_yaw,
+        rc_cmd=result.rc_cmd,
+        ext_fc_roll=result.ext_fc_roll,
+        ext_fc_pitch=result.ext_fc_pitch,
+        imu_angle=tuple(result.imu_angle),
+        frame_imu_angle=tuple(result.frame_imu_angle),
+        target_angle=tuple(result.target_angle),
+        cycle_time=result.cycle_time,
+        i2c_error_count=result.i2c_error_count,
+        error_code=result.error_code,
+        bat_level=result.bat_level,
+        rt_data_flags=result.rt_data_flags,
+        cur_imu=result.cur_imu,
+        cur_profile=result.cur_profile,
+        motor_power=tuple(result.motor_power),
     )
 
 
@@ -151,47 +213,125 @@ def get_realtime_data_4(self) -> RealtimeData4:
     common = make_realtime_data_3(result)
     return RealtimeData4(
         **{name: getattr(common, name) for name in common.__dataclass_fields__},
-        frame_cam_angle=tuple(result.frame_cam_angle), reserved1=result.reserved1,
-        balance_error=tuple(result.balance_error), current=result.current, mag_data=tuple(result.mag_data),
-        imu_temperature=result.imu_temperature, frame_imu_temperature=result.frame_imu_temperature,
-        imu_g_error=result.imu_g_error, imu_h_error=result.imu_h_error, motor_out=tuple(result.motor_out),
-        calib_mode=result.calib_mode, can_imu_ext_sens_error=result.can_imu_ext_sens_error,
-        actual_angle=tuple(result.actual_angle), system_state_flags=result.system_state_flags,
+        frame_cam_angle=tuple(result.frame_cam_angle),
+        reserved1=result.reserved1,
+        balance_error=tuple(result.balance_error),
+        current=result.current,
+        mag_data=tuple(result.mag_data),
+        imu_temperature=result.imu_temperature,
+        frame_imu_temperature=result.frame_imu_temperature,
+        imu_g_error=result.imu_g_error,
+        imu_h_error=result.imu_h_error,
+        motor_out=tuple(result.motor_out),
+        calib_mode=result.calib_mode,
+        can_imu_ext_sens_error=result.can_imu_ext_sens_error,
+        actual_angle=tuple(result.actual_angle),
+        system_state_flags=result.system_state_flags,
         reserved2=bytes(result.reserved2),
     )
 
 
 def realtime_data_custom_payload_size(flags: RealtimeDataCustomFlag) -> int:
-    field_sizes = (6, 6, 6, 6, 6, 12, 24, 36, 6, 8, 26, 9, 12, 40, 20, 46, 6, 12, 12, 7, 13, 8, 8, 8, 8, 12, 6, 24)
+    field_sizes = (
+        6,
+        6,
+        6,
+        6,
+        6,
+        12,
+        24,
+        36,
+        6,
+        8,
+        26,
+        9,
+        12,
+        40,
+        20,
+        46,
+        6,
+        12,
+        12,
+        7,
+        13,
+        8,
+        8,
+        8,
+        8,
+        12,
+        6,
+        24,
+    )
     size = 2 + sum(size for bit, size in enumerate(field_sizes) if int(flags) & (1 << bit))
     if size > 0xFF:
-        raise ValueError(f"selected realtime fields require {size} bytes; the protocol limit is 255")
+        raise ValueError(
+            f"selected realtime fields require {size} bytes; the protocol limit is 255"
+        )
     return size
 
 
-def parse_realtime_data_custom(flags: RealtimeDataCustomFlag, raw_payload: bytes) -> RealtimeDataCustom:
+def parse_realtime_data_custom(
+    flags: RealtimeDataCustomFlag, raw_payload: bytes
+) -> RealtimeDataCustom:
     timestamp_ms = struct.unpack_from("<H", raw_payload)[0]
     offset = 2
     fields: dict[RealtimeDataCustomFlag, object] = {}
+
     def read(format_string: str):
         nonlocal offset
         size = struct.calcsize(format_string)
         value = struct.unpack_from(format_string, raw_payload, offset)
         offset += size
         return value[0] if len(value) == 1 else value
+
     def read_bytes(size: int) -> bytes:
         nonlocal offset
-        value = raw_payload[offset:offset + size]
+        value = raw_payload[offset : offset + size]
         offset += size
         return value
-    parsers = (lambda: read("<3h"), lambda: read("<3h"), lambda: read("<3h"), lambda: read("<3h"), lambda: read("<3h"), lambda: read("<6h"), lambda: read("<6f"), lambda: read("<18h"), lambda: read("<3h"), lambda: read("<hhf"), lambda: read_bytes(26), lambda: read_bytes(9), lambda: read("<3f"), lambda: read("<10f"), lambda: read("<10h"), lambda: read_bytes(46), lambda: read("<3h"), lambda: read("<3i"), lambda: read("<3i"), lambda: read("<3HB"), lambda: read_bytes(13), lambda: read_bytes(8), lambda: read_bytes(8), lambda: read_bytes(8), lambda: read("<4H"), lambda: read("<6h"), lambda: read("<3h"), lambda: read("<6i"))
+
+    parsers = (
+        lambda: read("<3h"),
+        lambda: read("<3h"),
+        lambda: read("<3h"),
+        lambda: read("<3h"),
+        lambda: read("<3h"),
+        lambda: read("<6h"),
+        lambda: read("<6f"),
+        lambda: read("<18h"),
+        lambda: read("<3h"),
+        lambda: read("<hhf"),
+        lambda: read_bytes(26),
+        lambda: read_bytes(9),
+        lambda: read("<3f"),
+        lambda: read("<10f"),
+        lambda: read("<10h"),
+        lambda: read_bytes(46),
+        lambda: read("<3h"),
+        lambda: read("<3i"),
+        lambda: read("<3i"),
+        lambda: read("<3HB"),
+        lambda: read_bytes(13),
+        lambda: read_bytes(8),
+        lambda: read_bytes(8),
+        lambda: read_bytes(8),
+        lambda: read("<4H"),
+        lambda: read("<6h"),
+        lambda: read("<3h"),
+        lambda: read("<6i"),
+    )
     for bit, parser in enumerate(parsers):
         flag = RealtimeDataCustomFlag(1 << bit)
         if flags & flag:
             fields[flag] = parser()
     if offset != len(raw_payload):
-        raise NativeError("REALTIME_DATA_CUSTOM response length does not match the requested flags.")
-    return RealtimeDataCustom(flags=flags, timestamp_ms=timestamp_ms, fields=MappingProxyType(fields), raw_payload=raw_payload)
+        raise ValueError("REALTIME_DATA_CUSTOM response length does not match the requested flags.")
+    return RealtimeDataCustom(
+        flags=flags,
+        timestamp_ms=timestamp_ms,
+        fields=MappingProxyType(fields),
+        raw_payload=raw_payload,
+    )
 
 
 def get_realtime_data_custom(self, flags: RealtimeDataCustomFlag | int) -> RealtimeDataCustom:
@@ -203,7 +343,9 @@ def get_realtime_data_custom(self, flags: RealtimeDataCustomFlag | int) -> Realt
     if int(selected_flags) < 0 or int(selected_flags) & ~((1 << 28) - 1):
         raise ValueError("flags must contain only CMD_REALTIME_DATA_CUSTOM bits")
     raw_payload = self._native.get_realtime_data_custom(
-        self._device, int(selected_flags), realtime_data_custom_payload_size(selected_flags)
+        self._device,
+        int(selected_flags),
+        realtime_data_custom_payload_size(selected_flags),
     )
     return parse_realtime_data_custom(selected_flags, raw_payload)
 
@@ -267,21 +409,48 @@ def _data_stream_config_to_native(config: DataStreamConfig) -> NativeDataStreamI
         sync_to_data=config.sync_to_data,
     )
 
-def start_data_stream(self, config: DataStreamConfig, *, need_confirmation: bool = False,) -> CommandConfirmation | None:
+
+def start_data_stream(
+    self,
+    config: DataStreamConfig,
+    *,
+    need_confirmation: bool = False,
+) -> CommandConfirmation | None:
     self._ensure_open()
     native_config = _data_stream_config_to_native(config)
 
-    return make_confirmation(self._native.start_data_stream(self._device, native_config, need_confirmation=need_confirmation, ))
+    return make_confirmation(
+        self._native.start_data_stream(
+            self._device,
+            native_config,
+            need_confirmation=need_confirmation,
+        )
+    )
 
 
-def stop_data_stream(self, config: DataStreamConfig, *, need_confirmation: bool = False,) -> CommandConfirmation | None:
+def stop_data_stream(
+    self,
+    config: DataStreamConfig,
+    *,
+    need_confirmation: bool = False,
+) -> CommandConfirmation | None:
     self._ensure_open()
     native_config = _data_stream_config_to_native(config)
 
-    return make_confirmation(self._native.stop_data_stream(self._device,native_config, need_confirmation=need_confirmation,))
+    return make_confirmation(
+        self._native.stop_data_stream(
+            self._device,
+            native_config,
+            need_confirmation=need_confirmation,
+        )
+    )
 
 
-def read_data_stream(self, config: DataStreamConfig, size: int | None = None,) -> bytes:
+def read_data_stream(
+    self,
+    config: DataStreamConfig,
+    size: int | None = None,
+) -> bytes:
     self._ensure_open()
 
     if not isinstance(config, DataStreamConfig):
@@ -294,12 +463,18 @@ def read_data_stream(self, config: DataStreamConfig, size: int | None = None,) -
     match command:
         case DataStreamCommand.REALTIME_DATA_CUSTOM:
             if len(config.config) < 4:
-                raise ValueError("REALTIME_DATA_CUSTOM stream config must contain four little-endian flag bytes")
+                raise ValueError(
+                    "REALTIME_DATA_CUSTOM stream config must contain four little-endian flag bytes"
+                )
 
-            selected_flags = RealtimeDataCustomFlag(int.from_bytes(config.config[:4], byteorder="little"))
+            selected_flags = RealtimeDataCustomFlag(
+                int.from_bytes(config.config[:4], byteorder="little")
+            )
 
             if int(selected_flags) & ~((1 << 28) - 1):
-                raise ValueError("REALTIME_DATA_CUSTOM stream config contains unsupported realtime-data flags")
+                raise ValueError(
+                    "REALTIME_DATA_CUSTOM stream config contains unsupported realtime-data flags"
+                )
 
             size = realtime_data_custom_payload_size(selected_flags)
 
@@ -318,19 +493,20 @@ def read_data_stream(self, config: DataStreamConfig, size: int | None = None,) -
     if type(size) is not int or not 1 <= size <= 0xFF:
         raise ValueError("Payload_size must be an integer in range 1...255")
 
-    return self._native.read_data_stream(self._device, command_id, size,)
+    return self._native.read_data_stream(
+        self._device,
+        command_id,
+        size,
+    )
+
 
 _DEBUG_VAR_NAME_CAPACITY = 256
 _DEBUG_VAR_REQUEST_CAPACITY = 0xFF
 
 
 def _make_native_debug_var_info(count: int):
-    """ Makes massive of C-struct and writable-buffer for names. """
     native_vars = (NativeDebugVarInfo3 * count)()
-    name_buffers = [
-        ctypes.create_string_buffer(_DEBUG_VAR_NAME_CAPACITY)
-        for _ in range(count)
-    ]
+    name_buffers = [ctypes.create_string_buffer(_DEBUG_VAR_NAME_CAPACITY) for _ in range(count)]
 
     for native_var, name_buffer in zip(native_vars, name_buffers):
         native_var.name = ctypes.cast(
@@ -342,7 +518,6 @@ def _make_native_debug_var_info(count: int):
 
 
 def decode_debug_value(raw_type: int, raw_value: int) -> int | float:
-    """ Cast uint32 from native bridge to variable. """
     raw = raw_value.to_bytes(4, byteorder="little")
 
     match raw_type & 0x07:
@@ -361,7 +536,7 @@ def decode_debug_value(raw_type: int, raw_value: int) -> int | float:
         case 7:  # float32
             return struct.unpack("<f", raw)[0]
 
-    raise NativeError(f"Unsupported DEBUG_VARS_3 type: 0x{raw_type:02X}")
+    raise TypeError(f"Unsupported DEBUG_VARS_3 type: 0x{raw_type:02X}")
 
 
 def request_debug_var_info_3(self) -> tuple[DebugVarInfo, ...]:
@@ -373,7 +548,11 @@ def request_debug_var_info_3(self) -> tuple[DebugVarInfo, ...]:
     while start_index < 0xFF:
         native_vars, name_buffers = _make_native_debug_var_info(_DEBUG_VAR_REQUEST_CAPACITY)
 
-        self._native.request_debug_var_info_3(self._device, native_vars, start_index,)
+        self._native.request_debug_var_info_3(
+            self._device,
+            native_vars,
+            start_index,
+        )
 
         received = 0
 
@@ -381,9 +560,18 @@ def request_debug_var_info_3(self) -> tuple[DebugVarInfo, ...]:
             if native_var.name_length == 0:
                 break
 
-            name = ctypes.string_at(native_var.name, native_var.name_length,).decode("ascii", errors="replace")
+            name = ctypes.string_at(
+                native_var.name,
+                native_var.name_length,
+            ).decode("ascii", errors="replace")
 
-            result.append(DebugVarInfo(index=start_index + received, name=name, raw_type=native_var.type,))
+            result.append(
+                DebugVarInfo(
+                    index=start_index + received,
+                    name=name,
+                    raw_type=native_var.type,
+                )
+            )
             received += 1
 
         del name_buffers
@@ -395,7 +583,11 @@ def request_debug_var_info_3(self) -> tuple[DebugVarInfo, ...]:
 
     return tuple(result)
 
-def _make_debug_var_masks(selected_indexes: Sequence[int], variable_count: int,) -> tuple[int, ...]:
+
+def _make_debug_var_masks(
+    selected_indexes: Sequence[int],
+    variable_count: int,
+) -> tuple[int, ...]:
     if not selected_indexes:
         raise ValueError("Selected_indexes must not be empty")
 
@@ -450,12 +642,14 @@ def format_debug_var_info_3(variables: Sequence[DebugVarInfo]) -> str:
         if raw_type & 0x80:
             flags.append("RESERVED")
 
-        rows.append((
-            str(variable.index),
-            variable.name,
-            _DEBUG_VAR_TYPE_NAMES.get(raw_type & 0x07, f"unknown (0x{raw_type:02X})"),
-            ", ".join(flags) or "-",
-        ))
+        rows.append(
+            (
+                str(variable.index),
+                variable.name,
+                _DEBUG_VAR_TYPE_NAMES.get(raw_type & 0x07, f"unknown (0x{raw_type:02X})"),
+                ", ".join(flags) or "-",
+            )
+        )
 
     headers = ("IDX", "NAME", "TYPE", "FLAGS")
     widths = tuple(
@@ -464,10 +658,7 @@ def format_debug_var_info_3(variables: Sequence[DebugVarInfo]) -> str:
     )
 
     def render(row: tuple[str, str, str, str]) -> str:
-        return "  ".join(
-            value.ljust(widths[column])
-            for column, value in enumerate(row)
-        ).rstrip()
+        return "  ".join(value.ljust(widths[column]) for column, value in enumerate(row)).rstrip()
 
     separator = "  ".join("-" * width for width in widths)
     return "\n".join((render(headers), separator, *(render(row) for row in rows)))
@@ -478,7 +669,11 @@ def print_debug_var_info_3(variables: Sequence[DebugVarInfo]) -> None:
     print(format_debug_var_info_3(variables))
 
 
-def request_debug_var_values_3(self, variables: Sequence[DebugVarInfo], selected_indexes: Sequence[int] | None = None,) -> tuple[DebugVarInfo, ...]:
+def request_debug_var_values_3(
+    self,
+    variables: Sequence[DebugVarInfo],
+    selected_indexes: Sequence[int] | None = None,
+) -> tuple[DebugVarInfo, ...]:
     self._ensure_open()
 
     variables = tuple(variables)
@@ -493,15 +688,19 @@ def request_debug_var_values_3(self, variables: Sequence[DebugVarInfo], selected
     for native_var, variable in zip(native_vars, variables):
         native_var.type = variable.raw_type
 
-    masks = (None 
-             if selected_indexes is None 
-             else _make_debug_var_masks(selected_indexes, len(variables)))
-
-    self._native.request_debug_var_values_3(self._device, native_vars, masks,)
-
-    selected = (range(len(variables))
+    masks = (
+        None
         if selected_indexes is None
-        else set(selected_indexes))
+        else _make_debug_var_masks(selected_indexes, len(variables))
+    )
+
+    self._native.request_debug_var_values_3(
+        self._device,
+        native_vars,
+        masks,
+    )
+
+    selected = range(len(variables)) if selected_indexes is None else set(selected_indexes)
 
     result = []
 
@@ -511,13 +710,15 @@ def request_debug_var_values_3(self, variables: Sequence[DebugVarInfo], selected
             continue
 
         raw_value = native_var.value
-        result.append(DebugVarInfo(
-            index=variable.index,
-            name=variable.name,
-            raw_type=variable.raw_type,
-            raw_value=raw_value,
-            value=decode_debug_value(variable.raw_type, raw_value),
-        ))
+        result.append(
+            DebugVarInfo(
+                index=variable.index,
+                name=variable.name,
+                raw_type=variable.raw_type,
+                raw_value=raw_value,
+                value=decode_debug_value(variable.raw_type, raw_value),
+            )
+        )
 
     del name_buffers
     return tuple(result)
@@ -551,29 +752,34 @@ def select_imu_3(
     except ValueError as error:
         raise ValueError("action must be a supported SelectImuAction") from error
 
-    if selected_imu is ImuType.CURRENTLY_ACTIVE and selected_action is SelectImuAction.SIMPLE_SELECT:
+    if (
+        selected_imu is ImuType.CURRENTLY_ACTIVE
+        and selected_action is SelectImuAction.SIMPLE_SELECT
+    ):
         raise ValueError("CURRENTLY_ACTIVE is only valid with an extended IMU action")
 
-    return make_confirmation(self._native.select_imu_3(
-        self._device,
-        int(selected_imu),
-        int(selected_action),
-        time_ms,
-        need_confirmation=need_confirmation,
-    ))
+    return make_confirmation(
+        self._native.select_imu_3(
+            self._device,
+            int(selected_imu),
+            int(selected_action),
+            time_ms,
+            need_confirmation=need_confirmation,
+        )
+    )
 
 
 _CONTROL_QUAT_STATUS_FIELD_SIZES = (
-    3,   # mode + flags
+    3,  # mode + flags
     16,  # target attitude
     16,  # setpoint attitude
     16,  # actual attitude
-    6,   # target speed
-    6,   # setpoint speed
-    6,   # actual speed
-    8,   # target packed attitude
-    8,   # setpoint packed attitude
-    8,   # actual packed attitude
+    6,  # target speed
+    6,  # setpoint speed
+    6,  # actual speed
+    8,  # target packed attitude
+    8,  # setpoint packed attitude
+    8,  # actual packed attitude
 )
 _CONTROL_QUAT_STATUS_MASK = (1 << len(_CONTROL_QUAT_STATUS_FIELD_SIZES)) - 1
 
@@ -623,7 +829,7 @@ def get_control_quat_status(
 
     def read_bytes(size: int) -> bytes:
         nonlocal offset
-        value = raw_payload[offset:offset + size]
+        value = raw_payload[offset : offset + size]
         offset += size
         return value
 
@@ -657,7 +863,7 @@ def get_control_quat_status(
         values["actual_attitude_packed"] = read_bytes(8)
 
     if offset != len(raw_payload):
-        raise NativeError("CONTROL_QUAT_STATUS response length does not match the requested flags")
+        raise ValueError("CONTROL_QUAT_STATUS response length does not match the requested flags")
 
     return ControlQuatStatus(
         requested_fields=selected,
