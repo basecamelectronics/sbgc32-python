@@ -15,24 +15,26 @@ How to use code
 Download wheel you need from the GitHub Release or latest wheel from [`dist/`](dist/). Place file to workspace.
 
 In powershell or other cmd install wheel:
-   ```powershell
-   py -m pip install .\sbgc32-...-name.whl
-   ```
+
+```powershell
+py -m pip install .\sbgc32-...-name.whl
+```
 
 In `.py` file import library:
 
-    ```
-    from sbgc32 import SimpleBGC
-    ```
+```powershell
+from sbgc32 import SimpleBGC
+```
 
 Use example QuickStart to print board info and angles.
 Use example Motors to rotate the gimbal along the axis yaw on 35 degrees.
 Use example BodeTestAutomation to analyze motors and tune PID. To use this example
 with graphics, download and import numpy and matplotlib:
-    ```powershell
-    pip install numpy
-    pip install matplotlib
-    ```
+
+```powershell
+pip install numpy
+pip install matplotlib
+```
 
 Files Description
 -----------
@@ -140,15 +142,16 @@ cmake --build build/native --config Release
 `Bild the wheel`
 -----------------------
 Download `build` packet:
-    ```powershell
-    py -m pip install build
-    ```
+
+```powershell
+py -m pip install build
+```
 
 To build the wheel, change directory with library and build it:
 	
-    ```powershell
-    py -m build --wheel --outdir dist
-    ```
+```powershell
+py -m build --wheel --outdir dist
+```
 
 Documentation
 -----------

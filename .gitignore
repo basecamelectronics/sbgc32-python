@@ -21,6 +21,7 @@ __pycache__/
 
 # CMake settings
 CMakeSettings.json
+CMakePresets.json
 
 # CMake and generated native libraries: release them as wheels, not source files.
 /src/sbgc32/_native/*.dll
