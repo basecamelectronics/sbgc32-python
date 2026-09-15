@@ -1,4 +1,4 @@
-"""Build configuration for the native-c and pyserial wheel variants."""
+"""Build configuration wheel."""
 
 from __future__ import annotations
 
@@ -7,36 +7,17 @@ import sys
 
 from setuptools import find_packages, setup
 from wheel.bdist_wheel import bdist_wheel
+from pathlib import Path
 
+README = Path(__file__).with_name("README.md").read_text(encoding="utf-8")
 
-WHEEL_BACKEND = os.environ.get("SBGC32_WHEEL_BACKEND", "native_c")
-VERSION = os.environ.get("SBGC32_VERSION", "0.9.0").lstrip("v")
+PACKAGE_NAME = "sbgc32"
+VERSION = os.environ.get("SBGC32_VERSION", "0.9.2").lstrip("v")
 
-PROFILES = {
-    "native_c": {
-        "name": "sbgc32-native-c",
-        "dependencies": [],
-        "native_file": "_native/sbgc_python.dll",
-    },
-    "pyserial": {
-        "name": "sbgc32-pyserial",
-        "dependencies": ["pyserial>=3.5"],
-        "native_file": {
-            "win32": "_native/sbgc_python_pyserial.dll",
-            "darwin": "_native/libsbgc_python_pyserial.dylib",
-        }.get(sys.platform, "_native/libsbgc_python_pyserial.so"),
-    },
-}
-
-try:
-    PROFILE = PROFILES[WHEEL_BACKEND]
-except KeyError as error:
-    choices = ", ".join(PROFILES)
-    raise SystemExit(f"Unknown SBGC32_WHEEL_BACKEND={WHEEL_BACKEND!r}; use {choices}.") from error
-
-if WHEEL_BACKEND == "native_c" and sys.platform != "win32":
-    raise SystemExit("The native_c wheel can only be built on Windows.")
-
+PROTOCOL_LIBRARY = {
+    "win32": "_native/sbgc_python_protocol.dll",
+    "darwin": "_native/libsbgc_python_protocol.dylib",
+}.get(sys.platform, "_native/libsbgc_python_protocol.so")
 
 class BinaryWheel(bdist_wheel):
     """The package contains a platform-specific shared library."""
@@ -51,13 +32,33 @@ class BinaryWheel(bdist_wheel):
 
 
 setup(
-    name=PROFILE["name"],
+    name=PACKAGE_NAME,
     version=VERSION,
-    description="Python bindings for the SimpleBGC32 Serial API",
+    description="Asynchronous Python interface for the SimpleBGC32 Serial API",
+    long_description=README,
+    long_description_content_type="text/markdown",
     python_requires=">=3.10",
-    install_requires=PROFILE["dependencies"],
+    install_requires=["pyserial>=3.5"],
+
+    author="BaseCam Electronics",
+    author_email="support@basecamelectronics.com",
+    license="Apache-2.0",
+    url="https://github.com/basecamelectronics/sbgc32-python",
+
+    project_urls={
+        "Source": "https://github.com/basecamelectronics/sbgc32-python",
+        "Issues": "https://github.com/basecamelectronics/sbgc32-python/issues",
+        "SerialAPI": "https://www.basecamelectronics.com/serialapi/",
+    },
+    keywords=[
+        "basecam",
+        "simplebgc",
+        "gimbal",
+        "serialapi",
+    ],
+
     package_dir={"": "src"},
     packages=find_packages("src"),
-    package_data={"sbgc32": [PROFILE["native_file"]]},
+    package_data={"sbgc32": [PROTOCOL_LIBRARY]},
     cmdclass={"bdist_wheel": BinaryWheel},
 )

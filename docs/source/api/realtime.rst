@@ -1,51 +1,22 @@
-Realtime API reference
-======================
+Realtime and stream commands
+============================
 
-Connection methods
-------------------
+The realtime module reads orientation, realtime controller state, RC inputs,
+quaternion status, debug variables and controller data streams. Results are
+decoded value objects; malformed controller payloads raise ``ValueError`` in
+the decoder, while a missing response raises ``CommandTimeoutError``.
 
-.. automethod:: sbgc32.SimpleBGC.get_angles
-
-.. automethod:: sbgc32.SimpleBGC.get_angles_ext
-
-.. automethod:: sbgc32.SimpleBGC.get_realtime_data
-
-.. automethod:: sbgc32.SimpleBGC.get_realtime_data_3
-
-.. automethod:: sbgc32.SimpleBGC.get_realtime_data_4
-
-.. automethod:: sbgc32.SimpleBGC.get_realtime_data_custom
-
-.. automethod:: sbgc32.SimpleBGC.read_rc_inputs
-
-Data streams
-------------
-
-.. automethod:: sbgc32.SimpleBGC.start_data_stream
-
-.. automethod:: sbgc32.SimpleBGC.read_data_stream
-
-.. automethod:: sbgc32.SimpleBGC.stop_data_stream
-
-Debug and IMU methods
----------------------
-
-.. automethod:: sbgc32.SimpleBGC.request_debug_var_info_3
-
-.. automethod:: sbgc32.SimpleBGC.request_debug_var_values_3
-
-.. automethod:: sbgc32.SimpleBGC.format_debug_var_info_3
-
-.. automethod:: sbgc32.SimpleBGC.print_debug_var_info_3
-
-.. automethod:: sbgc32.SimpleBGC.select_imu_3
-
-.. automethod:: sbgc32.SimpleBGC.get_control_quat_status
-
-Public data types
------------------
-
-.. toctree::
-   :maxdepth: 1
-
-   realtime-types
+.. autofunction:: sbgc32.modules.realtime.get_angles
+.. autofunction:: sbgc32.modules.realtime.get_angles_ext
+.. autofunction:: sbgc32.modules.realtime.get_realtime_data
+.. autofunction:: sbgc32.modules.realtime.get_realtime_data_3
+.. autofunction:: sbgc32.modules.realtime.get_realtime_data_4
+.. autofunction:: sbgc32.modules.realtime.get_realtime_data_custom
+.. autofunction:: sbgc32.modules.realtime.read_rc_inputs
+.. autofunction:: sbgc32.modules.realtime.get_control_quat_status
+.. autofunction:: sbgc32.modules.realtime.start_data_stream
+.. autofunction:: sbgc32.modules.realtime.stop_data_stream
+.. autofunction:: sbgc32.modules.realtime.read_data_stream
+.. autofunction:: sbgc32.modules.realtime.request_debug_var_info_3
+.. autofunction:: sbgc32.modules.realtime.request_debug_var_values_3
+.. autofunction:: sbgc32.modules.realtime.select_imu_3

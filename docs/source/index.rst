@@ -1,40 +1,38 @@
 SimpleBGC32 Python API
 ======================
 
-This documentation describes the public Python interface for the
-`SimpleBGC32 Serial API <https://www.basecamelectronics.com/serialapi/>`_.
-For installation, transport backends, and a minimal connection example, see
-the project's ``README.md``.
+Python interface for the `SimpleBGC32 Serial API
+<https://www.basecamelectronics.com/serialapi/>`_. The API is asynchronous:
+controller methods return :class:`concurrent.futures.Future` objects. Call
+``.result()`` when the decoded response is needed.
 
-The Python layer provides typed, connection-oriented access to selected
-controller commands. The official Serial API documentation remains the source
-of truth for command identifiers, firmware compatibility, protocol units, and
-bit definitions.
+Quick start
+-----------
 
-.. toctree::
-   :maxdepth: 2
-   :caption: Guides
+.. code-block:: python
 
-   realtime
-   control
-   adjvars
-   service
-   calibration
-   eeprom
-   imu
-   profiles
-   execute-formatting
+   from sbgc32 import SimpleBGC
+
+   with SimpleBGC("COM4") as gimbal:
+       angles = gimbal.get_angles().result()
+       print(gimbal.format.angles(angles))
+
+The official SerialAPI documentation is authoritative for controller firmware
+compatibility, protocol units, and command-specific bit definitions.
 
 .. toctree::
    :maxdepth: 2
    :caption: API reference
 
+   api/device
+   api/errors
+   api/formatter
+   api/types
    api/realtime
    api/control
    api/adjvars
-   api/service
    api/calibration
    api/eeprom
    api/imu
    api/profiles
-   api/execute-formatting
+   api/service

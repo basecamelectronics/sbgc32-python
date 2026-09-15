@@ -4,61 +4,63 @@ SimpleBGC32 Serial API Open Source Python Library
 
 
 -----------
-This project provides Python wrapper for the [SimpleBGC32 Serial API](https://github.com/basecamelectronics/sbgc32-serial-api).
+This project is a Python implementation of the [SimpleBGC32 Serial API](https://github.com/basecamelectronics/sbgc32-serial-api).
 It communicates with SimpleBGC controllers through a COM port 
-and provides access to selected Serial API commands.
+and provides access to Serial API commands.
 
-The package uses a native DLL as a bridge to the vendored C Serial API.
-The bridge uses PySerial or native C for transport and keeps Serial API structures and
-packet handling inside native code.
+For standard use, you need Python 3.10+ and a wheel matching your operating system.
 
 How to use code
 -----------------------
-Download wheel you need from [`dist/`](dist/). Place file to workspace.
+Download wheel you need from the GitHub Release or latest wheel from [`dist/`](dist/). Place file to workspace.
 
 In powershell or other cmd install wheel:
    ```powershell
-   py -m pip install .\sbgc32-...name.whl
+   py -m pip install .\sbgc32-...-name.whl
    ```
 
 In `.py` file import library:
 
-    ```python
+    ```
     from sbgc32 import SimpleBGC
     ```
 
+Use example QuickStart to print board info and angles.
+Use example Motors to rotate the gimbal along the axis yaw on 35 degrees.
+Use example BodeTestAutomation to analyze motors and tune PID. To use this example
+with graphics, download and import numpy and matplotlib:
+    ```powershell
+    pip install numpy
+    pip install matplotlib
+    ```
 
 Files Description
 -----------
 
-[`dist/`](dist/) - wheels for import. Interaction with port through native_c (only on Windows) or pyserial;
+[`dist/`](dist/) - latest compatible wheel;
 
 [`docs/`](docs/) - documentation;
 
 [`examples/`](examples/) - executable examples for connecting to and testing a controller;
 
-[`src/sbgc32/`](src/sbgc32/) - Python package: public API, value types, command identifiers, and ctypes bindings for the DLL;
+[`src/sbgc32/`](src/sbgc32/) - Python package: value types, command identifiers, and ctypes bindings for the DLL;
 
-[`src/sbgc32/backend`](src/sbgc32/backend/) - backend for interaction with serial port;
+[`src/sbgc32/modules`](src/sbgc32/modules/) - modules from SerialAPI;
 
-[`native/`](native/) - C bridge between Python and the SimpleBGC Serial API;
-`sbgc_py_transpot_win32.c` need to interact with port with native C;
-`sbgc_py_transpot_pyserial.c` need to interact with port with pyserial;
+[`native/`](native/) - C bridge between Python and the codec SerialAPI;
 
-[`vendor/serialAPI/`](vendor/serialAPI/) - vendored BaseCam SimpleBGC32 Serial
-API C library;
+[`vendor/serialAPI/`](vendor/serialAPI/) - vendored BaseCam SimpleBGC32 Serial API C library;
 
 [`pyproject.toml`](pyproject.toml) - Python package metadata and dependencies.
 
 [`setup.py`](setup.py) - settings for create a wheel;
 
 
-Requirements to use the library
+Requirements to build the library by yourself
 -----------------------
 - Windows 10 or Windows 11, 64-bit;
 - Python 3.10 or newer, 64-bit;
-- [PySerial](https://pyserial.readthedocs.io/) 3.5 or newer (installed by the
-  package). If you do not use native wheel;
+- [PySerial](https://pyserial.readthedocs.io/) 3.5 or newer;
 - CMake 3.21 or newer;
 - Visual Studio Build Tools 2022 (or newer) with:
   - **Desktop development with C++** workload;
@@ -84,7 +86,7 @@ py -m pip install -e .
 Install pyserial, if it do not exist:
 
 ```powershell
-py install pyserial
+py -m pip install pyserial
 ```
 
 List available serial ports when necessary:
@@ -94,7 +96,7 @@ py -m serial.tools.list_ports
 ```
 
 
-How to use this library to make you wheel
+How to build this library by yourself to make your wheel
 -----------------------
 `Build the native DLL`
 -----------------------
@@ -105,14 +107,13 @@ Windows cannot replace a DLL while a running process has loaded it.
 Configure and build the 64-bit DLL from the repository root:
 
 ```powershell
-cmake -S native -B build/native -G "Visual Studio 1x 202x" -A x64
+cmake -S . -B build/native -A x64
 cmake --build build/native --config Release
 ```
 
 The result is written to `src\sbgc32\_native\`
 
-Rebuild the DLL after changing a file in `native/` or changing a non-Python
-Serial API file, especially `vendor/serialAPI/serialAPI_Config.h`.
+Rebuild the DLL after changing a file in `native/` or in `vendor/`.
 
 #### CMake cannot find a C compiler
 
@@ -132,23 +133,22 @@ running the two CMake commands again:
 
 ```powershell
 Remove-Item -Recurse -Force build\native
-cmake -S native -B build/native -G "Visual Studio 17 2022" -A x64
+cmake -S . -B build/native -A x64
 cmake --build build/native --config Release
 ```
 
 `Bild the wheel`
 -----------------------
-To bild the wheel, change directory with library and choose the interaction with serial:
+Download `build` packet:
+    ```powershell
+    py -m pip install build
+    ```
+
+To build the wheel, change directory with library and build it:
 	
-```powershell
-$env:SBGC32_WHEEL_BACKEND = "native_c"
-python -m build --wheel --outdir dist\native_c
-```
-or
-```powershell
-$env:SBGC32_WHEEL_BACKEND = "pyserial"
-python -m build --wheel --outdir dist\pyserial
-```
+    ```powershell
+    py -m build --wheel --outdir dist
+    ```
 
 Documentation
 -----------
@@ -156,13 +156,12 @@ Build the local documentation site:
 
 ```powershell
 py -m pip install -r .\docs\requirements.txt
-py -m sphinx -W --keep-going -b html .\docs\source .\docs\build\html
+py -m sphinx -E -W --keep-going -b html .\docs\source .\docs\build\html
 ```
 
 See [`docs/README.md`](docs/README.md) for details.
 
 You can also see a description of command use `print(SimpleBGC.name_of_function.__doc__)` 
-
 
 Feedback
 -----------

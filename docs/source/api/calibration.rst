@@ -1,67 +1,20 @@
-Calibration API reference
-=========================
+Calibration commands
+====================
 
-:doc:`Calibration guide <../calibration>`
+Calibration commands start a controller operation or read its progress.
+Commands that only start an operation return ``None``; operations with a
+requested confirmation return ``CommandConfirmation``. Invalid calibration
+arguments are rejected before a frame is sent.
 
-Methods below belong to an open ``SimpleBGC`` instance. Starting a calibration
-does not wait for it to complete.
-
-Status and standard calibrations
---------------------------------
-
-.. list-table::
-   :header-rows: 1
-   :widths: 34 40 26
-
-   * - Method
-     - Parameters
-     - Result
-   * - ``g.request_calib_info(imu_type=ImuType.MAIN)``
-     - Main or frame :class:`~sbgc32.ImuType`.
-     - :class:`~sbgc32.CalibInfo`.
-   * - ``g.calib_acc()`` / ``g.calib_gyro()`` / ``g.calib_mag()``
-     - No parameters.
-     - ``None``; starts the selected calibration.
-   * - ``g.calib_poles()`` / ``g.calib_offset()``
-     - No parameters.
-     - ``None``; starts the selected motor calibration.
-   * - ``g.calib_encoders_offset(motor=255)``
-     - Axis ``0``, ``1``, ``2``, or ``255`` for all axes.
-     - ``None``.
-   * - ``g.calib_encoders_fld_offset()``
-     - No parameters.
-     - ``None``.
-
-Special calibrations
---------------------
-
-.. list-table::
-   :header-rows: 1
-   :widths: 34 40 26
-
-   * - Method
-     - Parameters
-     - Result
-   * - ``g.calib_bat(voltage, *, need_confirmation=False)``
-     - Battery ``voltage`` in 0.01 V units.
-     - Confirmation or ``None``.
-   * - ``g.calib_orient_corr(*, need_confirmation=False)``
-     - No parameters.
-     - Confirmation or ``None``.
-   * - ``g.calib_acc_ext_ref(reference, *, need_confirmation=False)``
-     - Three signed 16-bit acceleration reference values.
-     - Confirmation or ``None``.
-   * - ``g.calib_cogging(cogging, *, need_confirmation=False)``
-     - :class:`~sbgc32.CalibCogging` configuration.
-     - Confirmation or ``None``.
-   * - ``g.format_calib_info(info)``
-     - :class:`~sbgc32.CalibInfo` returned previously.
-     - Text table (``str``).
-
-Public data types
------------------
-
-.. toctree::
-   :maxdepth: 1
-
-   calibration-types
+.. autofunction:: sbgc32.modules.calib.request_calib_info
+.. autofunction:: sbgc32.modules.calib.calib_acc
+.. autofunction:: sbgc32.modules.calib.calib_gyro
+.. autofunction:: sbgc32.modules.calib.calib_mag
+.. autofunction:: sbgc32.modules.calib.calib_poles
+.. autofunction:: sbgc32.modules.calib.calib_offset
+.. autofunction:: sbgc32.modules.calib.calib_encoders_fld_offset
+.. autofunction:: sbgc32.modules.calib.calib_encoders_offset
+.. autofunction:: sbgc32.modules.calib.calib_bat
+.. autofunction:: sbgc32.modules.calib.calib_orient_corr
+.. autofunction:: sbgc32.modules.calib.calib_acc_ext_ref
+.. autofunction:: sbgc32.modules.calib.calib_cogging

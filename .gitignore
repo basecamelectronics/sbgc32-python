@@ -15,8 +15,12 @@ __pycache__/
 .mypy_cache/
 .ruff_cache/
 
-# Generated documentation site
+# Generated documentation site and my own docs
 /docs/build/
+/docs/myDocs
+
+# CMake settings
+CMakeSettings.json
 
 # CMake and generated native libraries: release them as wheels, not source files.
 /src/sbgc32/_native/*.dll
@@ -30,10 +34,7 @@ __pycache__/
 /.idea/
 .vscode/
 CppProperties.json
-CMakeSettings.json
 
 # Workspace for test
+/tests
 Test.py
-todo.txt
-mask_probe.py
-transport_benchmark.py

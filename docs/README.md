@@ -21,5 +21,5 @@ Use strict mode in CI or before publishing to treat broken links and warnings
 as errors:
 
 ```powershell
-py -m sphinx -W --keep-going -b html .\docs\source .\docs\build\html
+py -m sphinx -E -W --keep-going -b html .\docs\source .\docs\build\html
 ```

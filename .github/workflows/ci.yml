@@ -20,15 +20,14 @@ jobs:
         os: [windows-latest, ubuntu-latest, macos-latest]
 
     env:
-      SBGC32_WHEEL_BACKEND: pyserial
       SBGC32_VERSION: 0.0.0.dev0
 
     steps:
       - name: Get source code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: Set up Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v6
         with:
           python-version: "3.10"
 
@@ -40,6 +39,12 @@ jobs:
 
       - name: Check formatting
         run: python -m ruff format --check src examples
+
+      - name: Install documentation dependencies
+        run: python -m pip install -r docs/requirements.txt
+
+      - name: Build documentation in strict mode
+        run: python -m sphinx -E -W --keep-going -b html docs/source docs/build/ci-html
 
       - name: Configure native library on Windows
         if: runner.os == 'Windows'
@@ -72,13 +77,14 @@ jobs:
         run: >-
           python -c
           "import sbgc32;
-          from sbgc32.backends.pyserial import PySerialBackend;
-          PySerialBackend();
-          print('Package and native pyserial library: OK')"
+          from sbgc32.protocol import ProtocolCodec;
+          codec = ProtocolCodec();
+          assert codec.encode(73);
+          print('Package and native protocol codec: OK')"
 
       - name: Save wheel as build artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
-          name: sbgc32-pyserial-${{ matrix.os }}
+          name: sbgc32-${{ matrix.os }}
           path: wheelhouse/*.whl
           if-no-files-found: error

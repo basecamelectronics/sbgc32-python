@@ -81,7 +81,9 @@ extern		"C" {
 #define		SBGC_SEVERAL_DEVICES	sbgcOFF			/*!<  @ref Note1. Using more than one controller with the library					*/
 #define		SBGC_PROTOCOL_VERSION	2				/*!<  V.1 or V.2 SerialAPI protocol version											*/
 
-#define		SBGC_NON_BLOCKING_MODE	sbgcOFF			/*!<  Provide the library with non-blocking communication							*/
+#ifndef SBGC_NON_BLOCKING_MODE
+#define		SBGC_NON_BLOCKING_MODE	sbgcOFF			/*!<  Provide the library with non-blocking communication						*/
+#endif
 #if (SBGC_NON_BLOCKING_MODE)
 	#define	SBGC_NEED_TOKENS		sbgcOFF			/*!<  Add a special token to keep track current SBGC32_ request						*/
 	#define	SBGC_NEED_CALLBACKS		sbgcOFF			/*!<  Add the callbacks from the SBGC32_ functions to the user's custom events		*/
@@ -115,7 +117,7 @@ extern		"C" {
 #endif
 
 #define		SBGC_NEED_ASSERTS		sbgcOFF			/*!<  Allow commands assert															*/
-#define		SBGC_NEED_CONFIRM_CMD	sbgcON			/*!<  Service flag that responsible for CMD_CONFIRM commands handling				*/
+#define		SBGC_NEED_CONFIRM_CMD	sbgcOFF			/*!<  Service flag that responsible for CMD_CONFIRM commands handling				*/
 #define		SBGC_NEED_REF_INFO		sbgcOFF			/*!<  Debug mode flag for getting access to auxiliary info about system parameters	*/
 
 #define		SBGC_DEFAULT_TIMEOUT	1000				/*!<  Units: milliseconds. Default timeout for serial commands						*/
