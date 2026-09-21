@@ -10,7 +10,7 @@ from typing import Any, ClassVar
 from . import types as value_types
 from .dispatcher import Decoder, MessageDispatcher, ResponseKey
 from .format import Formatter
-from .modules import adjvars, calib, eeprom, imu, profiles, realtime, service
+from .modules import adjvars, bode, calib, eeprom, imu, profiles, realtime, service
 from .modules import control as control_module
 from .protocol import ProtocolCodec
 from .pyserial import PySerialTransport
@@ -230,6 +230,11 @@ class SimpleBGC:
     calib_orient_corr = calib.calib_orient_corr
     calib_acc_ext_ref = calib.calib_acc_ext_ref
     calib_cogging = calib.calib_cogging
+
+    # BODE TEST MODULE
+    open_bode_test_stream = bode.open_bode_test_stream
+    start_bode_test = bode.start_bode_test
+    run_bode_test = bode.run_bode_test
 
     # CONTROL MODULE
     control = control_module.control

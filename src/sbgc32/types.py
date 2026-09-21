@@ -1219,6 +1219,113 @@ class ServoOutput(IntFlag):
     CAN_DRIVER_7_PIN_2 = 1 << 17
 
 
+class BodeTestAxis(IntEnum):
+    ROLL = 0
+    PITCH = 1
+    YAW = 2
+
+
+class BodeStimulusType(IntEnum):
+    WHITE_NOISE = 1
+    SINE_SWEEP = 2
+    EXPONENTIAL_SINE_SWEEP = 3
+
+
+class BodeTestSystem(IntEnum):
+    PLANT_OPEN_LOOP = 70
+    PLANT_CLOSED_LOOP = 198
+    PLANT_WITH_NOTCHES_OPEN_LOOP = 6
+    PLANT_WITH_NOTCHES_CLOSED_LOOP = 134
+    CONTROLLER = 3
+    CONTROLLER_AND_PLANT_OPEN_LOOP = 7
+    CONTROLLER_AND_PLANT_CLOSED_LOOP = 135
+    OVERALL_SYSTEM_RESPONSE = 11
+
+
+@dataclass(frozen=True, slots=True)
+class BodeTestConfig:
+    axis: BodeTestAxis | int
+    stimulus_gain: int
+    end_frequency_hz: int
+    system: BodeTestSystem | int
+    test_duration_seconds: float
+    stimulus_type: BodeStimulusType | int = BodeStimulusType.WHITE_NOISE
+    start_frequency_hz: int = 3
+    mode: int = 0
+
+
+@dataclass(frozen=True, slots=True)
+class BodeTestSample:
+    input_value: float
+    output_value: float
+
+
+@dataclass(frozen=True, slots=True)
+class BodeTestData:
+    sample_counter: int
+    input_min: float
+    output_min: float
+    input_max: float
+    output_max: float
+    samples: tuple[BodeTestSample, ...]
+
+
+@dataclass(frozen=True, slots=True)
+class BodeTestFinished:
+    samples_count: int
+    error_code: int
+    mode: int
+
+
+@dataclass(frozen=True, slots=True)
+class BodeTestResult:
+    """All samples and completion status returned by one Bode-test run."""
+
+    config: BodeTestConfig
+    confirmation: CommandConfirmation | None
+    samples: tuple[BodeTestSample, ...]
+    completion: BodeTestFinished
+    data_packet_counters: tuple[int, ...] = ()
+    data_packet_sample_counts: tuple[int, ...] = ()
+
+    @property
+    def received_samples_count(self) -> int:
+        return len(self.samples)
+
+    @property
+    def samples_match(self) -> bool:
+        return self.received_samples_count in (
+            self.completion.samples_count,
+            self.completion.samples_count + 1,
+        )
+
+    @property
+    def completion_reports_last_sample_index(self) -> bool:
+        """Whether the completion count is the zero-based last sample index.
+
+        Some firmware versions report ``SAMPLES_COUNT`` in the final CMD #37
+        packet as the last sample index.  Therefore 5,000 collected samples
+        are reported as 4,999.  Both representations describe a complete run.
+        """
+        return self.received_samples_count == self.completion.samples_count + 1
+
+    @property
+    def sample_counter_discontinuities(self) -> int:
+        """Count unexpected jumps in consecutive CMD_BODE_TEST_DATA counters."""
+        return sum(
+            current != (previous + previous_size) & 0xFF
+            for previous, previous_size, current in zip(
+                self.data_packet_counters,
+                self.data_packet_sample_counts,
+                self.data_packet_counters[1:],
+            )
+        )
+
+    @property
+    def successful(self) -> bool:
+        return self.completion.error_code == 0 and self.samples_match
+
+
 # Re-export only value types defined by this module; implementation imports
 # such as ``dataclass`` and ``IntEnum`` stay private.
 __all__ = tuple(

@@ -20,7 +20,6 @@ KeyExtractor = Callable[[WireFrame], ResponseKey | None]
 
 class CommandTimeoutError(TimeoutError):
     """The board did not response."""
-
     pass
 
 
@@ -41,6 +40,51 @@ class ReceivedFrame:
     request_generation: int | None
     response_key: ResponseKey | None
     wire: WireFrame
+
+
+_BODE_SUBSCRIPTION_CLOSED = object()
+
+
+class BodeSubscription:
+    """Exclusive receiver for one active Bode-test data stream."""
+
+    def __init__(self, dispatcher: "MessageDispatcher", generation: int) -> None:
+        self._dispatcher = dispatcher
+        self.generation = generation
+        self._frames: Queue[ReceivedFrame | object] = Queue()
+        self._closed = Event()
+
+    @property
+    def closed(self) -> bool:
+        """Whether this subscription can no longer receive packets."""
+
+        return self._closed.is_set()
+
+    def get(self, timeout: float | None = None) -> ReceivedFrame:
+        """Wait for the next Bode packet or raise if the subscription closes."""
+
+        frame = self._frames.get(timeout=timeout)
+        if frame is _BODE_SUBSCRIPTION_CLOSED:
+            self._frames.put(_BODE_SUBSCRIPTION_CLOSED)
+            raise ConnectionError("Bode-test subscription is closed")
+        return frame
+
+    def close(self) -> None:
+        """Stop receiving packets and release the exclusive Bode session."""
+
+        if self._close_locally():
+            self._dispatcher.close_bode_subscription(self.generation)
+
+    def _submit(self, frame: ReceivedFrame) -> None:
+        if not self.closed:
+            self._frames.put(frame)
+
+    def _close_locally(self) -> bool:
+        if self._closed.is_set():
+            return False
+        self._closed.set()
+        self._frames.put(_BODE_SUBSCRIPTION_CLOSED)
+        return True
 
 
 @dataclass(frozen=True, slots=True)
@@ -97,6 +141,16 @@ class _AwaitUnsolicited:
     future: Future[Any]
 
 
+@dataclass(frozen=True, slots=True)
+class _OpenBodeSubscription:
+    future: Future[BodeSubscription]
+
+
+@dataclass(frozen=True, slots=True)
+class _CloseBodeSubscription:
+    generation: int
+
+
 @dataclass(slots=True)
 class _UnsolicitedWaiter:
     generation: int
@@ -135,6 +189,8 @@ class MessageDispatcher:
             _SubmitRequest
             | _IncomingFrame
             | _AwaitUnsolicited
+            | _OpenBodeSubscription
+            | _CloseBodeSubscription
             | _Transmitted
             | _TransmitFailed
             | _Stop
@@ -169,6 +225,8 @@ class MessageDispatcher:
         self._unsolicited_waiters: dict[int, deque[_UnsolicitedWaiter]] = defaultdict(deque)
         self._unsolicited_waiters_by_generation: dict[int, _UnsolicitedWaiter] = {}
         self._unsolicited_deadlines: list[tuple[float, int]] = []
+        self._bode_subscription_generations = count(1)
+        self._bode_subscription: BodeSubscription | None = None
 
         self._key_extractors: dict[int, KeyExtractor] = {}
 
@@ -320,6 +378,34 @@ class MessageDispatcher:
             )
         return future
 
+    def open_bode_subscription(self, *, timeout: float | None = 1.0) -> BodeSubscription:
+        """Reserve exclusive delivery of the next Bode-test stream.
+
+        Call this before transmitting ``CMD_BODE_TEST_START_STOP``.  The
+        controller protocol exposes no test identifier in CMD #38 packets, so
+        only one subscription may exist for a physical port at a time.
+        """
+
+        if timeout is not None and timeout <= 0:
+            raise ValueError("timeout must be positive or None")
+
+        future: Future[BodeSubscription] = Future()
+        with self._state_lock:
+            if not self._started.is_set():
+                raise RuntimeError("Call dispatcher.start() before open_bode_subscription()")
+            if not self._accepting_requests:
+                raise ConnectionError("Dispatcher is stopped")
+            self._events.put(_OpenBodeSubscription(future))
+
+        return future.result(timeout=timeout)
+
+    def close_bode_subscription(self, generation: int) -> None:
+        """Release a Bode subscription if it is still the active one."""
+
+        with self._state_lock:
+            if self._accepting_requests:
+                self._events.put(_CloseBodeSubscription(generation))
+
     # helpers
     def submit_incoming(self, frame: WireFrame) -> None:
         """Call only RX thread."""
@@ -395,6 +481,12 @@ class MessageDispatcher:
 
                 elif isinstance(event, _AwaitUnsolicited):
                     self._handle_await_unsolicited(event)
+
+                elif isinstance(event, _OpenBodeSubscription):
+                    self._handle_open_bode_subscription(event)
+
+                elif isinstance(event, _CloseBodeSubscription):
+                    self._handle_close_bode_subscription(event.generation)
 
                 elif isinstance(event, _Transmitted):
                     self._handle_transmitted(event.generation)
@@ -502,6 +594,23 @@ class MessageDispatcher:
             waiter.deadline = monotonic() + event.timeout
             heappush(self._unsolicited_deadlines, (waiter.deadline, waiter.generation))
 
+    def _handle_open_bode_subscription(self, event: _OpenBodeSubscription) -> None:
+        if self._bode_subscription is not None:
+            event.future.set_exception(RuntimeError("A Bode test is already active"))
+            return
+
+        subscription = BodeSubscription(self, next(self._bode_subscription_generations))
+        self._bode_subscription = subscription
+        event.future.set_result(subscription)
+
+    def _handle_close_bode_subscription(self, generation: int) -> None:
+        subscription = self._bode_subscription
+        if subscription is None or subscription.generation != generation:
+            return
+
+        self._bode_subscription = None
+        subscription._close_locally()
+
     def _handle_transmit_failed(self, generation: int, error: BaseException) -> None:
         pending = self._remove_pending(generation)
 
@@ -532,6 +641,14 @@ class MessageDispatcher:
         if pending is None:
             # This includes telemetry, stale replies and frames that arrive
             # before their request has been transmitted.
+            subscription = self._bode_subscription
+            if (
+                subscription is not None
+                and frame.command_id in (38, 37)
+            ):
+                subscription._submit(received)
+                return
+
             waiter = self._pop_unsolicited_waiter(frame.command_id)
             if waiter is None:
                 self._unsolicited.put(received)
@@ -581,6 +698,9 @@ class MessageDispatcher:
         self._unsolicited_waiters.clear()
         self._unsolicited_waiters_by_generation.clear()
         self._unsolicited_deadlines.clear()
+        if self._bode_subscription is not None:
+            self._bode_subscription._close_locally()
+            self._bode_subscription = None
 
         # Wake TX and worker layers without polling.
         self._outgoing.put(None)
