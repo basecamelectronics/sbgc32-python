@@ -231,9 +231,7 @@ class BodeTestStream:
 def open_bode_test_stream(self: SimpleBGC) -> BodeTestStream:
     """Prepare reception of CMD #38 and the final CMD #37 before starting a test."""
 
-    return BodeTestStream(
-        self._dispatcher.open_bode_subscription()
-    )
+    return BodeTestStream(self._dispatcher.open_bode_subscription())
 
 
 def start_bode_test(
@@ -284,8 +282,7 @@ def run_bode_test(
 
         if confirmation is not None and confirmation.status is not ConfirmationStatus.RECEIVED:
             raise RuntimeError(
-                "controller rejected Bode-test start "
-                f"(error code {confirmation.error_code})"
+                f"controller rejected Bode-test start (error code {confirmation.error_code})"
             )
 
         samples: list[BodeTestSample] = []
@@ -376,8 +373,7 @@ def csv_path_for_test(output_dir: Path, axis: BodeTestAxis, position: Position) 
         return f"{value:g}"
 
     return output_dir / (
-        f"{axis.name}_R{angle(position.roll)}_"
-        f"P{angle(position.pitch)}_Y{angle(position.yaw)}.csv"
+        f"{axis.name}_R{angle(position.roll)}_P{angle(position.pitch)}_Y{angle(position.yaw)}.csv"
     )
 
 
@@ -557,7 +553,9 @@ class BodePlotter:
             magnitude_axis=magnitude_axis,
             phase_axis=phase_axis,
             vertical_line=magnitude_axis.axvline(1, color="0.35", linestyle=":", visible=False),
-            magnitude_line=magnitude_axis.axhline(0, color="tab:blue", linestyle=":", visible=False),
+            magnitude_line=magnitude_axis.axhline(
+                0, color="tab:blue", linestyle=":", visible=False
+            ),
             phase_line=phase_axis.axhline(0, color="tab:red", linestyle=":", visible=False),
             annotation=magnitude_axis.annotate(
                 "",
@@ -571,7 +569,8 @@ class BodePlotter:
         )
 
         figure.canvas.mpl_connect(
-            "motion_notify_event", lambda event, plot_view=view: self._update_cursor(event, plot_view)
+            "motion_notify_event",
+            lambda event, plot_view=view: self._update_cursor(event, plot_view),
         )
 
         self._views.append(view)
@@ -615,7 +614,6 @@ class BodePlotter:
 
         return self._pyplot.cm.Blues(shade), self._pyplot.cm.Reds(shade), line_style
 
-
     def _update_cursor(self, event: Any, view: _BodePlotView) -> None:
 
         if event.inaxes not in (view.magnitude_axis, view.phase_axis) or event.xdata is None:
@@ -629,10 +627,7 @@ class BodePlotter:
         use_phase = event.inaxes is view.phase_axis
 
         curve, sample_index = min(
-            (
-                self._nearest_curve_sample(event, use_phase, candidate)
-                for candidate in view.curves
-            ),
+            (self._nearest_curve_sample(event, use_phase, candidate) for candidate in view.curves),
             key=lambda candidate: candidate[0],
         )[1:]
 

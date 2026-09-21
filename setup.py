@@ -4,10 +4,10 @@ from __future__ import annotations
 
 import os
 import sys
+from pathlib import Path
 
 from setuptools import find_packages, setup
 from wheel.bdist_wheel import bdist_wheel
-from pathlib import Path
 
 README = Path(__file__).with_name("README.md").read_text(encoding="utf-8")
 
@@ -18,6 +18,7 @@ PROTOCOL_LIBRARY = {
     "win32": "_native/sbgc_python_protocol.dll",
     "darwin": "_native/libsbgc_python_protocol.dylib",
 }.get(sys.platform, "_native/libsbgc_python_protocol.so")
+
 
 class BinaryWheel(bdist_wheel):
     """The package contains a platform-specific shared library."""
@@ -39,12 +40,10 @@ setup(
     long_description_content_type="text/markdown",
     python_requires=">=3.10",
     install_requires=["pyserial>=3.5"],
-
     author="BaseCam Electronics",
     author_email="support@basecamelectronics.com",
     license="Apache-2.0",
     url="https://github.com/basecamelectronics/sbgc32-python",
-
     project_urls={
         "Source": "https://github.com/basecamelectronics/sbgc32-python",
         "Issues": "https://github.com/basecamelectronics/sbgc32-python/issues",
@@ -56,7 +55,6 @@ setup(
         "gimbal",
         "serialapi",
     ],
-
     package_dir={"": "src"},
     packages=find_packages("src"),
     package_data={"sbgc32": [PROTOCOL_LIBRARY]},

@@ -20,6 +20,7 @@ KeyExtractor = Callable[[WireFrame], ResponseKey | None]
 
 class CommandTimeoutError(TimeoutError):
     """The board did not response."""
+
     pass
 
 
@@ -642,10 +643,7 @@ class MessageDispatcher:
             # This includes telemetry, stale replies and frames that arrive
             # before their request has been transmitted.
             subscription = self._bode_subscription
-            if (
-                subscription is not None
-                and frame.command_id in (38, 37)
-            ):
+            if subscription is not None and frame.command_id in (38, 37):
                 subscription._submit(received)
                 return
 

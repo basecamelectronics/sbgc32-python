@@ -2,18 +2,18 @@
 
 from __future__ import annotations
 
-from enum import Enum
 import inspect
-from pathlib import Path
 import re
 import sys
+from enum import Enum
+from pathlib import Path
 
 DOCS_SOURCE = Path(__file__).resolve().parent
 PROJECT_ROOT = DOCS_SOURCE.parents[1]
 sys.path.insert(0, str(DOCS_SOURCE))
 sys.path.insert(0, str(PROJECT_ROOT / "src"))
 
-from theme_colors import CLASSIC_THEME_OPTIONS
+from theme_colors import CLASSIC_THEME_OPTIONS  # noqa: E402
 
 project = "SimpleBGC32 Python API"
 copyright = "BaseCam Electronics"
@@ -253,7 +253,9 @@ def _function_errors(name: str, obj: object) -> list[tuple[str, str]]:
         "sbgc32.modules.service.read_motor_state",
     }:
         errors.append(("CanNotSupportedError", "If the controller does not provide a CAN port."))
-        errors.append(("ExternalMotorNotFoundError", "If the requested external motor does not reply."))
+        errors.append(
+            ("ExternalMotorNotFoundError", "If the requested external motor does not reply.")
+        )
     if name in {
         "sbgc32.modules.service.scan_can_device",
         "sbgc32.modules.service.request_module_list",
@@ -286,7 +288,15 @@ def _function_example(name: str, obj: object) -> list[str]:
         expression = f"result = types.{call}"
     else:
         expression = f"result = {call}"
-    return ["", "Example:", "", ".. code-block:: python", "", f"   {expression}", f"   # result: {result}"]
+    return [
+        "",
+        "Example:",
+        "",
+        ".. code-block:: python",
+        "",
+        f"   {expression}",
+        f"   # result: {result}",
+    ]
 
 
 def describe_public_function(
@@ -357,7 +367,9 @@ def describe_public_type(
                     )
                 )
     elif not lines:
-        lines.append("Value object used to pass structured data to, or receive it from, the controller.")
+        lines.append(
+            "Value object used to pass structured data to, or receive it from, the controller."
+        )
 
 
 def setup(app: object) -> None:

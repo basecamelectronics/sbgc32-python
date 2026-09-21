@@ -6,11 +6,10 @@ from pathlib import Path
 
 from sbgc32 import BodeTestAxis, SimpleBGC
 from sbgc32.modules.bode import (
-    MINIMUM_TEST_DURATION_SECONDS,
     DEFAULT_POSITION_SETTLE_SECONDS,
     DEFAULT_RECOVERY_SECONDS,
+    MINIMUM_TEST_DURATION_SECONDS,
     AxisTestSettings,
-    BodeTestSystem,
     Position,
     create_bode_plotter,
     csv_path_for_test,
@@ -19,39 +18,27 @@ from sbgc32.modules.bode import (
 
 # User configuration ---------------------------------------------------------
 
-'''
+
 TEST_DURATION_SECONDS = MINIMUM_TEST_DURATION_SECONDS
 POSITION_SETTLE_SECONDS = DEFAULT_POSITION_SETTLE_SECONDS
 RECOVERY_SECONDS = DEFAULT_RECOVERY_SECONDS
-'''
-
-TEST_DURATION_SECONDS = 5.0
-POSITION_SETTLE_SECONDS = 4.0
-RECOVERY_SECONDS = 2.5
-
-'''
 POSITIONS = tuple(
     Position(roll, pitch)
     for roll, pitch in product(
-        (-30.0, 0.0, 30.0), 
-        (-90.0, -60.0, -30.0, 0.0, 30.0, 60.0, 90.0)
-        )
-)
-'''
-
-POSITIONS = (
-    Position(-30.0, 0.0, 0.0),
-    Position(0.0, 90.0, 0.0)
+        (-30.0, 0.0, 30.0),
+        (-90.0, -60.0, -30.0, 0.0, 30.0, 60.0, 90.0),
+    )
 )
 
 AXIS_TESTS = {
-    BodeTestAxis.ROLL: AxisTestSettings(True, 3000, 6, 200, BodeTestSystem.CONTROLLER_AND_PLANT_OPEN_LOOP),
-    BodeTestAxis.PITCH: AxisTestSettings(False, 3000, 6, 200, BodeTestSystem.CONTROLLER_AND_PLANT_OPEN_LOOP),
-    BodeTestAxis.YAW: AxisTestSettings(False, 3000, 6, 200),
+    BodeTestAxis.ROLL: AxisTestSettings(True, 3000, 3, 200),
+    BodeTestAxis.PITCH: AxisTestSettings(False, 3000, 3, 200),
+    BodeTestAxis.YAW: AxisTestSettings(False, 3000, 3, 200),
 }
 
 
 # Helpers ---------------------------------------------------------
+
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
@@ -135,9 +122,7 @@ def _read_plot_requested(force_enabled: bool) -> bool:
     return answer in {"y", "yes"}
 
 
-def _read_plot_mode(
-    enabled: bool, specified_mode: str | None, *, force_enabled: bool
-) -> str:
+def _read_plot_mode(enabled: bool, specified_mode: str | None, *, force_enabled: bool) -> str:
     """Choose where optional Bode plots appear."""
     if specified_mode is not None:
         return specified_mode
@@ -157,9 +142,7 @@ def _check_output_paths(
     """Stop before motion when the planned CSV names are unsafe to use."""
 
     planned_paths = tuple(
-        csv_path_for_test(output_dir, axis, position)
-        for position in POSITIONS
-        for axis in axes
+        csv_path_for_test(output_dir, axis, position) for position in POSITIONS for axis in axes
     )
 
     duplicate_paths = {path for path in planned_paths if planned_paths.count(path) > 1}
@@ -175,9 +158,9 @@ def _check_output_paths(
     names = "\n".join(f"  {path.name}" for path in existing_paths)
 
     if not overwrite:
-        answer = input(
-            f"CSV files already exist:\n{names}\nOverwrite them? [y/n]: "
-        ).strip().casefold()
+        answer = (
+            input(f"CSV files already exist:\n{names}\nOverwrite them? [y/n]: ").strip().casefold()
+        )
         if answer not in {"y", "yes"}:
             raise SystemExit("Existing CSV files were left unchanged. Program stopped.")
         overwrite = True
@@ -187,6 +170,7 @@ def _check_output_paths(
 
 
 # Main function ---------------------------------------------------------
+
 
 def main() -> None:
     args = parse_args()
@@ -225,7 +209,6 @@ def main() -> None:
 
             for position in POSITIONS:
                 for axis in enabled_axes:
-
                     completed_tests += 1
 
                     print(
@@ -290,7 +273,6 @@ def main() -> None:
                         plotter.add(record)
 
         finally:
-
             if not args.leave_motors_on:
                 gimbal.motors_off().result()
                 print("Motors off.", flush=True)
