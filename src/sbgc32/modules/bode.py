@@ -39,6 +39,7 @@ _BODE_FINISHED_FORMAT = "<IHB15x"
 BODE_SAMPLE_PERIOD_SECONDS = 0.0008
 MINIMUM_TEST_DURATION_SECONDS = 4.0
 DEFAULT_POSITION_SETTLE_SECONDS = 2.0
+DEFAULT_AUTO_TASK_CONFIRMATION_TIMEOUT_SECONDS = 12.0
 DEFAULT_RECOVERY_SECONDS = 1.0
 
 
@@ -260,12 +261,7 @@ def run_bode_test(
     start_timeout: float | None = 2.0,
     packet_timeout: float | None = 2.0,
 ) -> BodeTestResult:
-    """Run one Bode test synchronously and return its complete data set.
-
-    The Bode subscription is reserved before CMD #37 is transmitted, so the
-    first CMD #38 packet cannot race the initial confirmation.  This blocks
-    the caller only; the transport and dispatcher threads remain responsive.
-    """
+    """Run one Bode test and return its complete data set."""
 
     stream = self.open_bode_test_stream()
     try:
@@ -288,6 +284,7 @@ def run_bode_test(
         samples: list[BodeTestSample] = []
         data_packet_counters: list[int] = []
         data_packet_sample_counts: list[int] = []
+
         while True:
             if initial_packet is not None:
                 packet = initial_packet
@@ -323,8 +320,8 @@ def _position_axes(position: Position) -> tuple[ControlAxis, ControlAxis, Contro
             angle=position.pitch,
         ),
         ControlAxis(
-            mode=ControlMode.ANGLE_REL_FRAME | ControlFlag.AUTO_TASK,
-            angle=position.yaw,
+            # Yaw alwayes 0.
+            mode=ControlMode.IGNORE,
         ),
     )
 
@@ -334,13 +331,21 @@ def move_to_position(
     position: Position,
     *,
     settle_seconds: float = DEFAULT_POSITION_SETTLE_SECONDS,
+    confirmation_timeout_seconds: float = DEFAULT_AUTO_TASK_CONFIRMATION_TIMEOUT_SECONDS,
 ) -> None:
-    """Move to an Euler pose and allow the automatically scheduled task to settle."""
+    """Move to an Euler pose and wait for the AUTO_TASK completion confirmation."""
 
     if not isfinite(settle_seconds) or settle_seconds < 0:
         raise ValueError("settle_seconds must be a finite non-negative number")
+    if not isfinite(confirmation_timeout_seconds) or confirmation_timeout_seconds <= 0:
+        raise ValueError("confirmation_timeout_seconds must be a finite positive number")
 
-    self.control(_position_axes(position), need_confirmation=True).result()
+    self.control(
+        _position_axes(position),
+        need_confirmation=True,
+        timeout=confirmation_timeout_seconds,
+    ).result()
+
     sleep(settle_seconds)
 
 
@@ -350,7 +355,7 @@ def make_bode_test_config(
     *,
     test_duration_seconds: float,
 ) -> BodeTestConfig:
-    """Build one controller request from the duration and per-axis settings."""
+    """Build one controller request from the duration and per axis settings."""
 
     if not isinstance(settings, AxisTestSettings):
         raise TypeError("settings must be AxisTestSettings")
@@ -432,7 +437,6 @@ def run_bode_test_at_position(
 
 
 def _calculate_bode(result: BodeTestResult, numpy: Any) -> tuple[Any, Any, Any]:
-    """Estimate output/input transfer response with overlapped Hann windows."""
 
     input_values = numpy.asarray([sample.input_value for sample in result.samples], dtype=float)
     output_values = numpy.asarray([sample.output_value for sample in result.samples], dtype=float)
@@ -493,11 +497,11 @@ class _BodePlotView:
 
 
 class BodePlotter:
-    """Interactive Bode views grouped by file, windows or both."""
+    """Interactive Bode views grouped by axis, file, or both."""
 
-    _MODES = frozenset(("file", "windows", "both"))
+    _MODES = frozenset(("axis", "file", "both"))
 
-    def __init__(self, numpy: Any, pyplot: Any, *, mode: str = "file") -> None:
+    def __init__(self, numpy: Any, pyplot: Any, *, mode: str = "axis") -> None:
         if mode not in self._MODES:
             raise ValueError(f"plot mode must be one of {sorted(self._MODES)}")
 
@@ -522,16 +526,16 @@ class BodePlotter:
         gain_color, phase_color, line_style = self._curve_style(self._record_count)
         self._record_count += 1
 
-        if self._mode in {"file", "both"}:
-            file_view = self._axis_views.get(record.axis)
-            if file_view is None:
-                file_view = self._create_view(f"Bode — {record.axis.name}")
-                self._axis_views[record.axis] = file_view
-            self._add_curve(file_view, curve, gain_color, phase_color, line_style)
+        if self._mode in {"axis", "both"}:
+            axis_view = self._axis_views.get(record.axis)
+            if axis_view is None:
+                axis_view = self._create_view(f"Bode — {record.axis.name}")
+                self._axis_views[record.axis] = axis_view
+            self._add_curve(axis_view, curve, gain_color, phase_color, line_style)
 
-        if self._mode in {"windows", "both"}:
-            windows_view = self._create_view(f"Bode — {record.csv_path.name}")
-            self._add_curve(windows_view, curve, gain_color, phase_color, line_style)
+        if self._mode in {"file", "both"}:
+            file_view = self._create_view(f"Bode — {record.csv_path.name}")
+            self._add_curve(file_view, curve, gain_color, phase_color, line_style)
 
         self._pyplot.pause(0.001)
 
@@ -687,7 +691,7 @@ class BodePlotter:
             self._pyplot.show()
 
 
-def create_bode_plotter(enabled: bool, *, mode: str = "file") -> BodePlotter | None:
+def create_bode_plotter(enabled: bool, *, mode: str = "axis") -> BodePlotter | None:
     """Create the optional plotter or print a clear dependency warning."""
 
     if not enabled:

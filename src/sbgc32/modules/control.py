@@ -165,7 +165,11 @@ def control(
     return _confirmation(
         self,
         Command.CMD_CONTROL,
-        struct.pack("<3B3h3h", *modes, *speeds, *angles),
+        struct.pack(
+            "<3B6h",
+            *modes,
+            *(value for speed, angle in zip(speeds, angles) for value in (speed, angle)),
+        ),
         need_confirmation,
         timeout,
     )

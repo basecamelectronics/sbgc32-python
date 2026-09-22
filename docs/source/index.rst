@@ -20,6 +20,14 @@ Quick start
 The official SerialAPI documentation is authoritative for controller firmware
 compatibility, protocol units, and command-specific bit definitions.
 
+Examples
+--------
+
+.. toctree::
+   :maxdepth: 1
+
+   examples/bode_test_automation
+
 .. toctree::
    :maxdepth: 2
    :caption: API reference

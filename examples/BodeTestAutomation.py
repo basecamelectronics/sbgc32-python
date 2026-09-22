@@ -7,7 +7,6 @@ from pathlib import Path
 from sbgc32 import BodeTestAxis, SimpleBGC
 from sbgc32.modules.bode import (
     DEFAULT_POSITION_SETTLE_SECONDS,
-    DEFAULT_RECOVERY_SECONDS,
     MINIMUM_TEST_DURATION_SECONDS,
     AxisTestSettings,
     Position,
@@ -21,12 +20,22 @@ from sbgc32.modules.bode import (
 
 TEST_DURATION_SECONDS = MINIMUM_TEST_DURATION_SECONDS
 POSITION_SETTLE_SECONDS = DEFAULT_POSITION_SETTLE_SECONDS
-RECOVERY_SECONDS = DEFAULT_RECOVERY_SECONDS
+
+"""
 POSITIONS = tuple(
     Position(roll, pitch)
     for roll, pitch in product(
         (-30.0, 0.0, 30.0),
         (-90.0, -60.0, -30.0, 0.0, 30.0, 60.0, 90.0),
+    )
+)
+"""
+
+POSITIONS = tuple(
+    Position(roll, pitch)
+    for roll, pitch in product(
+        (-30.0, 0.0, 30.0),
+        (-70.0, -30.0, 0.0, 30.0, 70.0),
     )
 )
 
@@ -49,10 +58,16 @@ def parse_args() -> argparse.Namespace:
         help="directory for CSV files; otherwise a folder-selection dialog is shown",
     )
     parser.add_argument("--overwrite", action="store_true", help="replace existing CSV files")
-    parser.add_argument(
+    plot_group = parser.add_mutually_exclusive_group()
+    plot_group.add_argument(
         "--plot",
         action="store_true",
         help="show Bode plots without asking (requires NumPy and Matplotlib)",
+    )
+    plot_group.add_argument(
+        "--no-plot",
+        action="store_true",
+        help="run without plots and without asking about visualization",
     )
     parser.add_argument(
         "--plot-mode",
@@ -114,10 +129,12 @@ def _read_output_dir(value: Path | None) -> Path:
     return Path(selected).expanduser()
 
 
-def _read_plot_requested(force_enabled: bool) -> bool:
-    """Ask for optional plotting unless it was explicitly enabled by a flag."""
+def _read_plot_requested(force_enabled: bool, force_disabled: bool) -> bool:
+    """Ask for optional plotting unless a command-line flag specified it."""
     if force_enabled:
         return True
+    if force_disabled:
+        return False
     answer = input("Use visualization [y/n]: ").strip().casefold()
     return answer in {"y", "yes"}
 
@@ -129,8 +146,15 @@ def _read_plot_mode(enabled: bool, specified_mode: str | None, *, force_enabled:
     if not enabled or force_enabled:
         return "axis"
 
-    answer = input("Plot mode: [f]ile, [w]indows, or [b]oth: ").strip().casefold()
-    return {"f": "file", "file": "file", "b": "both", "both": "both"}.get(answer, "axis")
+    answer = input("Plot mode: [a]xis, [f]iles, or [b]oth: ").strip().casefold()
+    return {
+        "a": "axis",
+        "axis": "axis",
+        "f": "file",
+        "file": "file",
+        "b": "both",
+        "both": "both",
+    }.get(answer, "axis")
 
 
 def _check_output_paths(
@@ -187,7 +211,7 @@ def main() -> None:
 
     overwrite = _check_output_paths(output_dir, enabled_axes, overwrite=args.overwrite)
 
-    plot_requested = _read_plot_requested(args.plot)
+    plot_requested = _read_plot_requested(args.plot, args.no_plot)
     plot_mode = _read_plot_mode(plot_requested, args.plot_mode, force_enabled=args.plot)
     plotter = create_bode_plotter(plot_requested, mode=plot_mode)
     total_tests = len(POSITIONS) * len(enabled_axes)
@@ -202,9 +226,14 @@ def main() -> None:
         input("Ensure the work area is clear and press Enter to start. ")
 
     with SimpleBGC(port=port) as gimbal:
-        gimbal.motors_on().result()
+        motors_may_be_on = False
+        interrupted = False
 
         try:
+            # Set this before the request, so Ctrl+C during motors_on is also safe.
+            motors_may_be_on = True
+            gimbal.motors_on().result()
+
             completed_tests = 0
 
             for position in POSITIONS:
@@ -226,7 +255,6 @@ def main() -> None:
                         test_duration_seconds=TEST_DURATION_SECONDS,
                         overwrite=overwrite,
                         position_settle_seconds=POSITION_SETTLE_SECONDS,
-                        recovery_seconds=RECOVERY_SECONDS,
                     )
 
                     result = record.result
@@ -241,13 +269,10 @@ def main() -> None:
                         )
 
                     if result.completion_reports_last_sample_index:
-                        samples_text = (
-                            f"samples {result.received_samples_count} "
-                            f"(last index {result.completion.samples_count})"
-                        )
+                        samples_text = f"samples {result.received_samples_count} "
                     else:
                         samples_text = (
-                            f"samples {result.received_samples_count}/"
+                            f"samples {result.received_samples_count} / "
                             f"{result.completion.samples_count}"
                         )
 
@@ -272,8 +297,13 @@ def main() -> None:
                     if plotter is not None:
                         plotter.add(record)
 
+        except KeyboardInterrupt:
+            interrupted = True
+            print("Interrupted. Switching motors off.", flush=True)
+            raise
+
         finally:
-            if not args.leave_motors_on:
+            if motors_may_be_on and (interrupted or not args.leave_motors_on):
                 gimbal.motors_off().result()
                 print("Motors off.", flush=True)
 
