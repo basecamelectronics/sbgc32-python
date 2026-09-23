@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import argparse
 from itertools import product
+from math import isfinite
 from pathlib import Path
 
 from sbgc32 import BodeTestAxis, SimpleBGC
@@ -17,11 +18,15 @@ from sbgc32.modules.bode import (
 
 # User configuration ---------------------------------------------------------
 
-
 TEST_DURATION_SECONDS = MINIMUM_TEST_DURATION_SECONDS
 POSITION_SETTLE_SECONDS = DEFAULT_POSITION_SETTLE_SECONDS
+SERIAL_PORT: str | None = None
+DEFAULT_OUTPUT_DIR: Path | None = None
+PLOT_ENABLED = False
+PLOT_MODE = "axis"
+OVERWRITE_EXISTING: bool | None = None
 
-"""
+
 POSITIONS = tuple(
     Position(roll, pitch)
     for roll, pitch in product(
@@ -29,15 +34,7 @@ POSITIONS = tuple(
         (-90.0, -60.0, -30.0, 0.0, 30.0, 60.0, 90.0),
     )
 )
-"""
 
-POSITIONS = tuple(
-    Position(roll, pitch)
-    for roll, pitch in product(
-        (-30.0, 0.0, 30.0),
-        (-70.0, -30.0, 0.0, 30.0, 70.0),
-    )
-)
 
 AXIS_TESTS = {
     BodeTestAxis.ROLL: AxisTestSettings(True, 3000, 3, 200),
@@ -46,50 +43,112 @@ AXIS_TESTS = {
 }
 
 
-# Helpers ---------------------------------------------------------
+LEAVE_MOTORS_ON = False
+WAIT_FOR_AUTO_TASK_CONFIRMATION = True
+SKIP_START_CONFIRMATION = False
 
 
-def parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--port", help="Serial port, for example COM4")
+class _ArgumentParser(argparse.ArgumentParser):
+    """Show the full command reference when an argument is invalid."""
+
+    def error(self, message: str) -> None:
+        self.print_help()
+        self.exit(2, f"\n{self.prog}: error: {message}\n")
+
+
+def parse_args(arguments: list[str] | None = None) -> argparse.Namespace:
+    """Parse command-line options without requesting runtime parameters."""
+
+    parser = _ArgumentParser(
+        description="Run Bode tests for configured positions and save CSV files.",
+        formatter_class=argparse.ArgumentDefaultsHelpFormatter,
+    )
+    parser.add_argument(
+        "--port",
+        default=argparse.SUPPRESS,
+        help="serial port, for example COM4 (optional; default: prompt)",
+    )
     parser.add_argument(
         "--output-dir",
         type=Path,
-        help="directory for CSV files; otherwise a folder-selection dialog is shown",
+        default=argparse.SUPPRESS,
+        help="directory for CSV files (optional; default: file-selection dialog)",
     )
-    parser.add_argument("--overwrite", action="store_true", help="replace existing CSV files")
-    plot_group = parser.add_mutually_exclusive_group()
-    plot_group.add_argument(
+    parser.add_argument(
+        "--duration",
+        type=float,
+        default=TEST_DURATION_SECONDS,
+        metavar="SECONDS",
+        help="duration of one test in seconds (optional; default: %(default)g)",
+    )
+    parser.add_argument(
+        "--settle-seconds",
+        type=float,
+        default=POSITION_SETTLE_SECONDS,
+        metavar="SECONDS",
+        help="delay after reaching a position (optional; default: %(default)g)",
+    )
+    parser.add_argument(
+        "--axes",
+        choices=("roll", "pitch", "yaw"),
+        nargs="+",
+        metavar="AXIS",
+        default=argparse.SUPPRESS,
+        help="run only these enabled axes (optional; default: every enabled axis)",
+    )
+    parser.add_argument(
+        "--overwrite",
+        action=argparse.BooleanOptionalAction,
+        default=argparse.SUPPRESS,
+        help="replace existing CSV files (optional; default: prompt if files exist)",
+    )
+    parser.add_argument(
         "--plot",
-        action="store_true",
-        help="show Bode plots without asking (requires NumPy and Matplotlib)",
-    )
-    plot_group.add_argument(
-        "--no-plot",
-        action="store_true",
-        help="run without plots and without asking about visualization",
+        action=argparse.BooleanOptionalAction,
+        default=PLOT_ENABLED,
+        help="show Bode plots; requires NumPy and Matplotlib (optional; default: %(default)s)",
     )
     parser.add_argument(
         "--plot-mode",
         choices=("axis", "file", "both"),
-        help="axis: one window per axis; file: one window per CSV; both: all windows",
+        default=PLOT_MODE,
+        help="axis: one window per axis; file: one window per CSV; both: all windows "
+        "(optional; default: %(default)s)",
     )
-    parser.add_argument("--leave-motors-on", action="store_true")
-    parser.add_argument("--yes", action="store_true", help="skip the motor safety confirmation")
+    parser.add_argument(
+        "--leave-motors-on",
+        action=argparse.BooleanOptionalAction,
+        default=LEAVE_MOTORS_ON,
+        help="leave motors on after a normal run (optional; default: %(default)s)",
+    )
+    parser.add_argument(
+        "--yes",
+        action="store_true",
+        default=SKIP_START_CONFIRMATION,
+        help="skip the motor safety confirmation (optional; default: %(default)s)",
+    )
 
-    return parser.parse_args()
+    parsed = parser.parse_args(arguments)
+    if not isfinite(parsed.duration) or parsed.duration < MINIMUM_TEST_DURATION_SECONDS:
+        parser.error(f"--duration must be at least {MINIMUM_TEST_DURATION_SECONDS:g} seconds")
+    if not isfinite(parsed.settle_seconds) or parsed.settle_seconds < 0:
+        parser.error("--settle-seconds must not be negative")
+
+    return parsed
 
 
 def _read_port(value: str | None) -> str:
-    if value:
-        return value
-    port = input("COM port number: ").strip()
+    """Return a supplied COM port or request one for an IDE launch."""
+
+    port = value or input("COM port number: ").strip()
+    if not port:
+        raise SystemExit("COM port was not specified.")
 
     return port if port.upper().startswith("COM") else f"COM{port}"
 
 
-def _read_output_dir(value: Path | None) -> Path:
-    """Return an explicit output directory or ask the user to select one."""
+def _select_output_dir(value: Path | None) -> Path:
+    """Return an explicit directory or show the native folder-selection dialog."""
 
     if value is not None:
         return value.expanduser()
@@ -98,70 +157,35 @@ def _read_output_dir(value: Path | None) -> Path:
         import tkinter as tk
         from tkinter import filedialog
     except ImportError:
-        tk = None
+        selected = ""
 
     else:
         try:
             root = tk.Tk()
         except tk.TclError:
-            root = None
-
-        if root is not None:
+            selected = ""
+        else:
             root.withdraw()
             root.attributes("-topmost", True)
-
             try:
-                selected = filedialog.askdirectory(title="Chose catalog for Bode CSV")
+                selected = filedialog.askdirectory(title="Choose a directory for Bode CSV files")
             finally:
                 root.destroy()
 
-            if not selected:
-                raise SystemExit("Catalog selection cancelled.")
-
-            return Path(selected)
-
-    print("The folder selection window is unavailable. Please, specify the path in the console.")
-
-    selected = input("Catalog for CSV files: ").strip()
     if not selected:
-        raise SystemExit("Catalog for CSV do not select.")
+        selected = input("Directory for Bode CSV files: ").strip()
 
-    return Path(selected).expanduser()
+    if not selected:
+        raise SystemExit("Output directory selection was cancelled.")
 
-
-def _read_plot_requested(force_enabled: bool, force_disabled: bool) -> bool:
-    """Ask for optional plotting unless a command-line flag specified it."""
-    if force_enabled:
-        return True
-    if force_disabled:
-        return False
-    answer = input("Use visualization [y/n]: ").strip().casefold()
-    return answer in {"y", "yes"}
-
-
-def _read_plot_mode(enabled: bool, specified_mode: str | None, *, force_enabled: bool) -> str:
-    """Choose where optional Bode plots appear."""
-    if specified_mode is not None:
-        return specified_mode
-    if not enabled or force_enabled:
-        return "axis"
-
-    answer = input("Plot mode: [a]xis, [f]iles, or [b]oth: ").strip().casefold()
-    return {
-        "a": "axis",
-        "axis": "axis",
-        "f": "file",
-        "file": "file",
-        "b": "both",
-        "both": "both",
-    }.get(answer, "axis")
+    return Path(selected)
 
 
 def _check_output_paths(
     output_dir: Path,
     axes: tuple[BodeTestAxis, ...],
     *,
-    overwrite: bool,
+    overwrite: bool | None,
 ) -> bool:
     """Stop before motion when the planned CSV names are unsafe to use."""
 
@@ -177,20 +201,23 @@ def _check_output_paths(
 
     existing_paths = tuple(path for path in planned_paths if path.exists())
     if not existing_paths:
-        return overwrite
+        return bool(overwrite)
 
     names = "\n".join(f"  {path.name}" for path in existing_paths)
 
-    if not overwrite:
+    if overwrite is None:
         answer = (
             input(f"CSV files already exist:\n{names}\nOverwrite them? [y/n]: ").strip().casefold()
         )
         if answer not in {"y", "yes"}:
             raise SystemExit("Existing CSV files were left unchanged. Program stopped.")
-        overwrite = True
+    elif not overwrite:
+        raise FileExistsError(
+            f"CSV files already exist:\n{names}\nUse --overwrite to replace them."
+        )
 
     print(f"The following CSV files will be replaced:\n{names}")
-    return overwrite
+    return True
 
 
 # Main function ---------------------------------------------------------
@@ -199,9 +226,8 @@ def _check_output_paths(
 def main() -> None:
     args = parse_args()
 
-    port = _read_port(args.port)
-
-    output_dir = _read_output_dir(args.output_dir)
+    port = _read_port(getattr(args, "port", SERIAL_PORT))
+    output_dir = _select_output_dir(getattr(args, "output_dir", DEFAULT_OUTPUT_DIR))
     output_dir.mkdir(parents=True, exist_ok=True)
 
     enabled_axes = tuple(axis for axis, settings in AXIS_TESTS.items() if settings.enabled)
@@ -209,11 +235,22 @@ def main() -> None:
     if not enabled_axes:
         raise ValueError("Enable at least one axis in AXIS_TESTS")
 
-    overwrite = _check_output_paths(output_dir, enabled_axes, overwrite=args.overwrite)
+    requested_axis_names = getattr(args, "axes", None)
+    if requested_axis_names is not None:
+        requested_axes = tuple(BodeTestAxis[axis.upper()] for axis in requested_axis_names)
+        disabled_axes = tuple(axis for axis in requested_axes if axis not in enabled_axes)
+        if disabled_axes:
+            names = ", ".join(axis.name for axis in disabled_axes)
+            raise ValueError(f"Requested axis is disabled in AXIS_TESTS: {names}")
+        enabled_axes = requested_axes
 
-    plot_requested = _read_plot_requested(args.plot, args.no_plot)
-    plot_mode = _read_plot_mode(plot_requested, args.plot_mode, force_enabled=args.plot)
-    plotter = create_bode_plotter(plot_requested, mode=plot_mode)
+    overwrite = _check_output_paths(
+        output_dir,
+        enabled_axes,
+        overwrite=getattr(args, "overwrite", OVERWRITE_EXISTING),
+    )
+
+    plotter = create_bode_plotter(args.plot, mode=args.plot_mode)
     total_tests = len(POSITIONS) * len(enabled_axes)
 
     print(f"Count of tests: {total_tests}")
@@ -252,9 +289,10 @@ def main() -> None:
                         AXIS_TESTS[axis],
                         position,
                         output_dir=output_dir,
-                        test_duration_seconds=TEST_DURATION_SECONDS,
+                        test_duration_seconds=args.duration,
                         overwrite=overwrite,
-                        position_settle_seconds=POSITION_SETTLE_SECONDS,
+                        position_settle_seconds=args.settle_seconds,
+                        wait_for_position_confirmation=WAIT_FOR_AUTO_TASK_CONFIRMATION,
                     )
 
                     result = record.result

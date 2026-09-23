@@ -41,6 +41,8 @@ MINIMUM_TEST_DURATION_SECONDS = 4.0
 DEFAULT_POSITION_SETTLE_SECONDS = 2.0
 DEFAULT_AUTO_TASK_CONFIRMATION_TIMEOUT_SECONDS = 12.0
 DEFAULT_RECOVERY_SECONDS = 1.0
+PLOT_MAXIMUM_FREQUENCY_HZ = 500.0
+PLOT_FREQUENCY_TICKS_HZ = (1, 2, 3, 4, 5, 10, 20, 30, 40, 50, 100, 200, 300, 400, 500)
 
 
 @dataclass(frozen=True, slots=True)
@@ -332,19 +334,32 @@ def move_to_position(
     *,
     settle_seconds: float = DEFAULT_POSITION_SETTLE_SECONDS,
     confirmation_timeout_seconds: float = DEFAULT_AUTO_TASK_CONFIRMATION_TIMEOUT_SECONDS,
+    wait_for_confirmation: bool = True,
 ) -> None:
-    """Move to an Euler pose and wait for the AUTO_TASK completion confirmation."""
+    """Move to an Euler pose and optionally await AUTO_TASK confirmation."""
 
     if not isfinite(settle_seconds) or settle_seconds < 0:
         raise ValueError("settle_seconds must be a finite non-negative number")
     if not isfinite(confirmation_timeout_seconds) or confirmation_timeout_seconds <= 0:
         raise ValueError("confirmation_timeout_seconds must be a finite positive number")
+    if not isinstance(wait_for_confirmation, bool):
+        raise TypeError("wait_for_confirmation must be a bool")
 
-    self.control(
-        _position_axes(position),
-        need_confirmation=True,
-        timeout=confirmation_timeout_seconds,
-    ).result()
+    try:
+        self.control(
+            _position_axes(position),
+            need_confirmation=wait_for_confirmation,
+            timeout=confirmation_timeout_seconds,
+        ).result()
+    except TimeoutError as error:
+        if not wait_for_confirmation:
+            raise
+        raise TimeoutError(
+            f"AUTO_TASK confirmation was not received within {confirmation_timeout_seconds:g} seconds. "
+            "For old firmware that does not send CMD_CONFIRM, set "
+            "WAIT_FOR_AUTO_TASK_CONFIRMATION = False in BodeTestAutomation.py "
+            "and increase POSITION_SETTLE_SECONDS."
+        ) from error
 
     sleep(settle_seconds)
 
@@ -409,6 +424,7 @@ def run_bode_test_at_position(
     test_duration_seconds: float,
     overwrite: bool,
     position_settle_seconds: float = DEFAULT_POSITION_SETTLE_SECONDS,
+    wait_for_position_confirmation: bool = True,
     recovery_seconds: float = DEFAULT_RECOVERY_SECONDS,
 ) -> BodeTestRecord:
     """Move, acquire, save, then return to neutral after one Bode test."""
@@ -420,7 +436,12 @@ def run_bode_test_at_position(
 
     neutral = Position(0.0, 0.0, 0.0)
     try:
-        move_to_position(self, position, settle_seconds=position_settle_seconds)
+        move_to_position(
+            self,
+            position,
+            settle_seconds=position_settle_seconds,
+            wait_for_confirmation=wait_for_position_confirmation,
+        )
         result = self.run_bode_test(
             make_bode_test_config(
                 axis,
@@ -432,7 +453,12 @@ def run_bode_test_at_position(
         save_bode_csv(path, result, overwrite=overwrite)
         return BodeTestRecord(axis=axis, position=position, csv_path=path, result=result)
     finally:
-        move_to_position(self, neutral, settle_seconds=position_settle_seconds)
+        move_to_position(
+            self,
+            neutral,
+            settle_seconds=position_settle_seconds,
+            wait_for_confirmation=wait_for_position_confirmation,
+        )
         sleep(recovery_seconds)
 
 
@@ -467,13 +493,21 @@ def _calculate_bode(result: BodeTestResult, numpy: Any) -> tuple[Any, Any, Any]:
 
     frequency = numpy.fft.rfftfreq(segment_length, d=BODE_SAMPLE_PERIOD_SECONDS)
     magnitude_db = 20.0 * numpy.log10(numpy.maximum(numpy.abs(transfer), numpy.finfo(float).tiny))
-    phase_degrees = numpy.degrees(numpy.unwrap(numpy.angle(transfer)))
+    # A continuous positive phase is easier to read than repeated jumps at
+    # -180°/180°.  Its lowest value is the zero reference for this record.
+    phase_degrees = -numpy.degrees(numpy.unwrap(numpy.angle(transfer)))
     mask = (
         valid
         & (frequency >= result.config.start_frequency_hz)
         & (frequency <= result.config.end_frequency_hz)
+        & (frequency <= PLOT_MAXIMUM_FREQUENCY_HZ)
     )
-    return frequency[mask], magnitude_db[mask], phase_degrees[mask]
+    phase_degrees = phase_degrees[mask]
+    if not len(phase_degrees):
+        return frequency[mask], magnitude_db[mask], phase_degrees
+
+    phase_degrees -= phase_degrees.min()
+    return frequency[mask], magnitude_db[mask], phase_degrees
 
 
 @dataclass(slots=True)
@@ -546,6 +580,7 @@ class BodePlotter:
         magnitude_axis.set_xlabel("Frequency, Hz")
         magnitude_axis.set_ylabel("Amplitude, dB", color="tab:blue")
         phase_axis.set_ylabel("Phase, °", color="tab:red")
+        magnitude_axis.set_xscale("log")
         magnitude_axis.grid(True, which="both")
 
         manager = getattr(figure.canvas, "manager", None)
@@ -608,7 +643,34 @@ class BodePlotter:
 
         view.magnitude_axis.legend(loc="upper left")
         view.phase_axis.legend(loc="upper right")
+        self._set_frequency_ticks(view.magnitude_axis)
+        view.magnitude_axis.set_xlim(*self._frequency_limits(view))
+        self._set_phase_limits(view)
         view.figure.canvas.draw_idle()
+
+    def _frequency_limits(self, view: _BodePlotView) -> tuple[float, float]:
+        """Return GUI-like frequency limits for all curves in one view."""
+
+        first_frequency = min(float(curve.frequency[0]) for curve in view.curves)
+        last_frequency = min(
+            PLOT_MAXIMUM_FREQUENCY_HZ,
+            max(float(curve.frequency[-1]) for curve in view.curves),
+        )
+        return first_frequency, last_frequency
+
+    def _set_frequency_ticks(self, magnitude_axis: Any) -> None:
+        """Restore GUI-like labels after ``semilogx`` resets the formatter."""
+
+        magnitude_axis.set_xticks(
+            PLOT_FREQUENCY_TICKS_HZ,
+            labels=tuple(str(frequency) for frequency in PLOT_FREQUENCY_TICKS_HZ),
+        )
+
+    def _set_phase_limits(self, view: _BodePlotView) -> None:
+        """Show the continuous relative phase from zero upwards."""
+
+        maximum = max(float(curve.phase_degrees.max()) for curve in view.curves)
+        view.phase_axis.set_ylim(0, max(1.0, maximum * 1.05))
 
     def _curve_style(self, index: int) -> tuple[Any, Any, str]:
         """Use distinct blue/red shades and line styles for each test record."""

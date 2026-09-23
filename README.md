@@ -12,9 +12,9 @@ For standard use, you need Python 3.10+ and a wheel matching your operating syst
 
 How to use code
 -----------------------
-Download wheel you need from the GitHub Release or latest wheel from [`dist/`](dist/). Place file to workspace.
+Download wheel you need from the GitHub Release or latest wheel from the same place. Place file to your workspace.
 
-In powershell or other cmd install wheel:
+In PowerShell or other cmd install wheel:
 
 ```powershell
 py -m pip install .\sbgc32-...-name.whl
@@ -39,8 +39,6 @@ pip install matplotlib
 Files Description
 -----------
 
-[`dist/`](dist/) - latest compatible wheel;
-
 [`docs/`](docs/) - documentation;
 
 [`examples/`](examples/) - executable examples for connecting to and testing a controller;
@@ -53,9 +51,9 @@ Files Description
 
 [`vendor/serialAPI/`](vendor/serialAPI/) - vendored BaseCam SimpleBGC32 Serial API C library;
 
-[`pyproject.toml`](pyproject.toml) - Python package metadata and dependencies.
+[`pyproject.toml`](pyproject.toml) - Python package metadata and dependencies;
 
-[`setup.py`](setup.py) - settings for create a wheel;
+[`setup.py`](setup.py) - settings for create a wheel.
 
 
 Requirements to build the library by yourself
@@ -147,7 +145,7 @@ Download `build` packet:
 py -m pip install build
 ```
 
-To build the wheel, change directory with library and build it:
+To build the wheel, change directory to library and build it:
 	
 ```powershell
 py -m build --wheel --outdir dist

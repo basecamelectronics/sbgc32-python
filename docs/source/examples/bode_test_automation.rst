@@ -51,16 +51,86 @@ waits one second for recovery.
 CSV output
 ----------
 
-Choose an output directory interactively or supply ``--output-dir``. Files use
-the following name format:
+When ``--output-dir`` is omitted, the example opens the native folder-selection
+dialog. Files use the following name format:
 
 .. code-block:: text
 
    <AXIS>_R<roll>_P<pitch>_Y<yaw>.csv
 
 For example, a Roll test at ``R=-30``, ``P=-90`` is saved as
-``ROLL_R-30_P-90_Y0.csv``. The script detects duplicate names and asks before
-replacing existing files unless ``--overwrite`` was supplied.
+``ROLL_R-30_P-90_Y0.csv``. The script detects duplicate names. Existing files
+are offered for replacement unless ``--overwrite`` or ``--no-overwrite`` was
+supplied.
+
+Command-line parameters
+-----------------------
+
+The example can be started directly from an IDE. With the initial settings it
+first asks for a COM port (``7`` is accepted as ``COM7``), then opens the native
+folder-selection dialog, and asks before replacing existing CSV files. Command
+line keys override these values for one run. Invalid command-line arguments
+print the complete ``--help`` reference.
+
+All optional values are kept together at the beginning of the example for easy
+adjustment:
+
+.. code-block:: python
+
+   TEST_DURATION_SECONDS = MINIMUM_TEST_DURATION_SECONDS
+   POSITION_SETTLE_SECONDS = DEFAULT_POSITION_SETTLE_SECONDS
+   WAIT_FOR_AUTO_TASK_CONFIRMATION = True
+   SERIAL_PORT: str | None = None
+   DEFAULT_OUTPUT_DIR: Path | None = None
+   PLOT_ENABLED = False
+   PLOT_MODE = "axis"
+   OVERWRITE_EXISTING: bool | None = None
+   LEAVE_MOTORS_ON = False
+   SKIP_START_CONFIRMATION = False
+
+Every optional key overrides its corresponding default for one run:
+
+.. list-table::
+   :header-rows: 1
+
+   * - Key
+     - Purpose
+   * - ``--port COM7``
+     - Avoid the COM-port prompt.
+   * - ``--output-dir PATH``
+     - Avoid the folder-selection dialog.
+   * - ``--duration SECONDS``
+     - Duration of one test; at least four seconds.
+   * - ``--settle-seconds SECONDS``
+     - Position settling delay.
+   * - ``--axes roll pitch yaw``
+     - Restrict the run to axes enabled in ``AXIS_TESTS``.
+   * - ``--overwrite`` / ``--no-overwrite``
+     - Replace existing CSV files or preserve them without a prompt.
+   * - ``--plot`` / ``--no-plot``
+     - Enable or disable visualization.
+   * - ``--plot-mode axis|file|both``
+     - Select grouping of plot windows.
+   * - ``--leave-motors-on`` / ``--no-leave-motors-on``
+     - Override the motor state after normal completion.
+   * - ``--yes``
+     - Skip the separate safety confirmation before motion.
+
+Old firmware without ``CMD_CONFIRM``
+------------------------------------
+
+By default, ``WAIT_FOR_AUTO_TASK_CONFIRMATION`` is ``True``: before every
+test, the example waits for ``CMD_CONFIRM`` after its ``AUTO_TASK`` move. This
+is the safest option because it proves that the target position was reached.
+
+Some old firmware versions do not emit this confirmation. If the example
+reports an ``AUTO_TASK confirmation was not received`` timeout, change the
+setting in the example to ``False`` and use a longer fixed delay, for example:
+
+.. code-block:: python
+
+   WAIT_FOR_AUTO_TASK_CONFIRMATION = False
+   POSITION_SETTLE_SECONDS = 5.0
 
 Running safely
 --------------
@@ -69,17 +139,18 @@ Run the example from the repository root:
 
 .. code-block:: powershell
 
-   python examples/BodeTestAutomation.py --port COM4 --output-dir bode_results
+   python examples/BodeTestAutomation.py --port COM4 --output-dir bode_results --no-plot
 
 The gimbal moves through every configured position. Keep the workspace clear
 before confirming the start prompt. Press ``Ctrl+C`` to interrupt the run;
 motors are switched off even if ``--leave-motors-on`` was used.
 
-Add ``--no-plot`` to skip the visualization question and run without plots:
+For example, this single run changes only the duration, uses Roll, and
+replaces files that already exist:
 
 .. code-block:: powershell
 
-   python examples/BodeTestAutomation.py --port COM4 --output-dir bode_results --no-plot
+   python examples/BodeTestAutomation.py --port COM4 --output-dir bode_results --axes roll --duration 5 --overwrite --no-plot
 
 Plots
 -----
