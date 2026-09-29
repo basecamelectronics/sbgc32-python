@@ -171,6 +171,7 @@ class SimpleBGC:
     get_realtime_data_3 = realtime.get_realtime_data_3
     get_realtime_data_4 = realtime.get_realtime_data_4
     get_realtime_data_custom = realtime.get_realtime_data_custom
+    get_realtime_data_custom2 = realtime.get_realtime_data_custom2
     read_rc_inputs = realtime.read_rc_inputs
     get_control_quat_status = realtime.get_control_quat_status
     start_data_stream = realtime.start_data_stream
@@ -299,6 +300,14 @@ class SimpleBGC:
     play_beeper = service.play_beeper
     sign_message = service.sign_message
     scan_can_device = service.scan_can_device
+    scan_can_devices = service.scan_can_devices
     request_module_list = service.request_module_list
     send_transparent_command = service.send_transparent_command
     read_transparent_command = service.read_transparent_command
+    start_module_flash = service.start_module_flash
+    write_module_flash = service.write_module_flash
+    finish_module_flash = service.finish_module_flash
+    read_password_protection = service.read_password_protection
+    write_password_protection = service.write_password_protection
+    set_transparent_proxy = service.set_transparent_proxy
+    scan_udrv_devices = service.scan_udrv_devices

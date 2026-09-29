@@ -36,6 +36,15 @@ actions return ``None`` or a requested confirmation.
 .. autofunction:: sbgc32.modules.service.play_beeper
 .. autofunction:: sbgc32.modules.service.sign_message
 .. autofunction:: sbgc32.modules.service.scan_can_device
+.. autofunction:: sbgc32.modules.service.scan_can_devices
 .. autofunction:: sbgc32.modules.service.request_module_list
 .. autofunction:: sbgc32.modules.service.send_transparent_command
 .. autofunction:: sbgc32.modules.service.read_transparent_command
+.. autofunction:: sbgc32.modules.service.start_module_flash
+.. autofunction:: sbgc32.modules.service.write_module_flash
+.. autofunction:: sbgc32.modules.service.finish_module_flash
+.. autofunction:: sbgc32.modules.service.read_password_protection
+.. autofunction:: sbgc32.modules.service.write_password_protection
+.. autofunction:: sbgc32.modules.service.set_transparent_proxy
+.. autofunction:: sbgc32.modules.service.scan_udrv_devices
+.. autofunction:: sbgc32.crc32

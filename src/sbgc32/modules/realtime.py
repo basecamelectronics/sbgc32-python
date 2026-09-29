@@ -33,7 +33,11 @@ from ..types import (
     RealtimeData3,
     RealtimeData4,
     RealtimeDataCustom,
+    RealtimeDataCustom2,
+    RealtimeDataCustom2Flag,
     RealtimeDataCustomFlag,
+    RealtimeImuState,
+    RealtimePinState,
     SelectImuAction,
 )
 
@@ -201,6 +205,7 @@ def get_realtime_data(self: SimpleBGC, *, timeout: float | None = 1.0) -> Future
 
     return self.request_raw(
         int(Command.CMD_REALTIME_DATA),
+        response_command_id=int(Command.CMD_REALTIME_DATA_3),
         timeout=timeout,
         route="realtime",
         decoder=decode_realtime_data_3,
@@ -258,17 +263,21 @@ _CUSTOM_FIELD_SIZES = (
     12,
     6,
     24,
+    12,
+    11,
 )
 
 
 def _coerce_custom_flags(flags: RealtimeDataCustomFlag | int) -> RealtimeDataCustomFlag:
-    if isinstance(flags, bool):
+    if isinstance(flags, bool) or not isinstance(flags, int):
         raise TypeError("flags must be RealtimeDataCustomFlag bits")
+    if flags < 0:
+        raise ValueError("flags must be non-negative")
     try:
         selected = RealtimeDataCustomFlag(flags)
     except ValueError as error:
         raise ValueError("flags must contain only CMD_REALTIME_DATA_CUSTOM bits") from error
-    if int(selected) < 0 or int(selected) & ~((1 << len(_CUSTOM_FIELD_SIZES)) - 1):
+    if int(selected) & ~(((1 << len(_CUSTOM_FIELD_SIZES)) - 1) | (1 << 31)):
         raise ValueError("flags must contain only CMD_REALTIME_DATA_CUSTOM bits")
     return selected
 
@@ -280,6 +289,8 @@ def realtime_data_custom_payload_size(flags: RealtimeDataCustomFlag | int) -> in
     size = 2 + sum(
         size for bit, size in enumerate(_CUSTOM_FIELD_SIZES) if int(selected) & (1 << bit)
     )
+    if selected & RealtimeDataCustomFlag.INCLUDE_FLAGS:
+        size += 4
     if size > 0xFF:
         raise ValueError(f"selected realtime fields require {size} bytes; protocol limit is 255")
     return size
@@ -298,6 +309,10 @@ def parse_realtime_data_custom(
         )
     timestamp_ms = struct.unpack_from("<H", raw_payload)[0]
     offset = 2
+    if selected & RealtimeDataCustomFlag.INCLUDE_FLAGS:
+        if struct.unpack_from("<I", raw_payload, offset)[0] != int(selected):
+            raise ValueError("REALTIME_DATA_CUSTOM response flags do not match the request")
+        offset += 4
     fields: dict[RealtimeDataCustomFlag, object] = {}
 
     def read(format_string: str) -> object:
@@ -342,6 +357,8 @@ def parse_realtime_data_custom(
         lambda: read("<6h"),
         lambda: read("<3h"),
         lambda: read("<6i"),
+        lambda: read("<3i"),
+        lambda: RealtimeImuState(*read("<4B7s")),
     )
     for bit, parser in enumerate(parsers):
         flag = RealtimeDataCustomFlag(1 << bit)
@@ -359,10 +376,78 @@ def get_realtime_data_custom(
     realtime_data_custom_payload_size(selected)
     return self.request_raw(
         int(Command.CMD_REALTIME_DATA_CUSTOM),
-        struct.pack("<I", int(selected)),
+        struct.pack("<I6x", int(selected)),
         timeout=timeout,
         route="realtime",
         decoder=lambda frame: parse_realtime_data_custom(selected, frame.payload),
+    )
+
+
+_CUSTOM2_FORMATS = ("<3h", "<3h", "<3h", "<4h", "<3h", "<HH4s", "<3H")
+
+
+def _coerce_custom2_flags(flags: RealtimeDataCustom2Flag | int) -> RealtimeDataCustom2Flag:
+    if isinstance(flags, bool) or not isinstance(flags, int):
+        raise TypeError("flags must be RealtimeDataCustom2Flag bits")
+    if flags < 0 or flags & ~0x8000007F:
+        raise ValueError("flags contain unsupported REALTIME_DATA_CUSTOM2 bits")
+    return RealtimeDataCustom2Flag(flags)
+
+
+def realtime_data_custom2_payload_size(flags: RealtimeDataCustom2Flag | int) -> int:
+    """Response size, including timestamp and optional echoed flags.
+
+    PIN_STATE is 8 bytes (the specification's 12-byte heading is a typo).
+    """
+    selected = _coerce_custom2_flags(flags)
+    return (
+        2
+        + (4 if selected & RealtimeDataCustom2Flag.INCLUDE_FLAGS else 0)
+        + sum(
+            struct.calcsize(fmt)
+            for bit, fmt in enumerate(_CUSTOM2_FORMATS)
+            if int(selected) & (1 << bit)
+        )
+    )
+
+
+def parse_realtime_data_custom2(
+    flags: RealtimeDataCustom2Flag | int, raw_payload: bytes
+) -> RealtimeDataCustom2:
+    """Decode CUSTOM2 fields in wire units, checking echoed flags when requested."""
+    selected = _coerce_custom2_flags(flags)
+    expected = realtime_data_custom2_payload_size(selected)
+    if len(raw_payload) != expected:
+        raise ValueError(
+            f"REALTIME_DATA_CUSTOM2 response must contain {expected} bytes, got {len(raw_payload)}"
+        )
+    timestamp_ms = struct.unpack_from("<H", raw_payload)[0]
+    offset = 2
+    if selected & RealtimeDataCustom2Flag.INCLUDE_FLAGS:
+        if struct.unpack_from("<I", raw_payload, offset)[0] != int(selected):
+            raise ValueError("REALTIME_DATA_CUSTOM2 response flags do not match the request")
+        offset += 4
+    fields: dict[RealtimeDataCustom2Flag, object] = {}
+    for bit, fmt in enumerate(_CUSTOM2_FORMATS):
+        flag = RealtimeDataCustom2Flag(1 << bit)
+        if selected & flag:
+            values = struct.unpack_from(fmt, raw_payload, offset)
+            fields[flag] = RealtimePinState(*values) if bit == 5 else values
+            offset += struct.calcsize(fmt)
+    return RealtimeDataCustom2(selected, timestamp_ms, MappingProxyType(fields), raw_payload)
+
+
+def get_realtime_data_custom2(
+    self: SimpleBGC, flags: RealtimeDataCustom2Flag | int, *, timeout: float | None = 1.0
+) -> Future[RealtimeDataCustom2]:
+    """Request configurable frame IMU and pin data (2.74.2+, STAB_ERR_AMPL: 2.74.4+)."""
+    selected = _coerce_custom2_flags(flags)
+    return self.request_raw(
+        int(Command.CMD_REALTIME_DATA_CUSTOM2),
+        struct.pack("<I6x", int(selected)),
+        timeout=timeout,
+        route="realtime",
+        decoder=lambda frame: parse_realtime_data_custom2(selected, frame.payload),
     )
 
 
@@ -613,8 +698,8 @@ def decode_confirmation(frame: WireFrame) -> CommandConfirmation:
         raise ValueError("CMD_CONFIRM/CMD_ERROR response has no command ID")
     command_id = frame.payload[0]
     if frame.command_id == 67:
-        if len(frame.payload) > 3:
-            raise ValueError("CMD_CONFIRM response may contain at most two data bytes")
+        if len(frame.payload) > 5:
+            raise ValueError("CMD_CONFIRM response may contain at most four data bytes")
         return CommandConfirmation(
             command_id=command_id,
             status=ConfirmationStatus.RECEIVED,
@@ -642,6 +727,10 @@ def _stream_result_size(config: DataStreamConfig, size: int | None) -> int:
         if len(config.config) < 4:
             raise ValueError("REALTIME_DATA_CUSTOM stream config must contain four flag bytes")
         size = realtime_data_custom_payload_size(int.from_bytes(config.config[:4], "little"))
+    elif known is DataStreamCommand.REALTIME_DATA_CUSTOM2:
+        if len(config.config) < 4:
+            raise ValueError("REALTIME_DATA_CUSTOM2 stream config must contain four flag bytes")
+        size = realtime_data_custom2_payload_size(int.from_bytes(config.config[:4], "little"))
     elif known is DataStreamCommand.REALTIME_DATA_3:
         size = _REALTIME_DATA_3_SIZE
     elif known is DataStreamCommand.REALTIME_DATA_4:

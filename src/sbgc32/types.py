@@ -383,6 +383,7 @@ class ControlConfigFlag(IntFlag):
     SERVO_MODE_ENABLE = 1 << 1
     SERVO_MODE_DISABLE = 1 << 2
     LPF_EXTENDED_RANGE = 1 << 3
+    LPF_FREQUENCY_HZ = 1 << 4
 
 
 class ControlExtDataSet(IntFlag):
@@ -422,6 +423,7 @@ class ControlQuatFlag(IntFlag):
     NEED_CONFIRM = 1 << 0
     ATTITUDE_PACKED = 1 << 1
     ATTITUDE_LIMITED_180 = 1 << 2
+    ATTITUDE_REMOVE_ABSENT_AXES = 1 << 3
     AUTO_TASK = 1 << 6
 
 
@@ -719,6 +721,7 @@ class DataStreamCommand(IntEnum):
     REALTIME_DATA_3 = 23
     REALTIME_DATA_4 = 25
     REALTIME_DATA_CUSTOM = 88
+    REALTIME_DATA_CUSTOM2 = 139
     AHRS_HELPER = 56
 
     EVENT = 102
@@ -850,6 +853,72 @@ class RealtimeDataCustomFlag(IntFlag):
     SW_LIMITS_DIST = 1 << 25
     FOLLOW_DIST = 1 << 26
     EXT_TARGET_LIMIT = 1 << 27
+    FRAME_CAM_ANGLE_20 = 1 << 28
+    MAIN_IMU_STATE = 1 << 29
+    INCLUDE_FLAGS = 1 << 31
+    FRAME_CAM_ANGLE = STATOR_ROTOR_ANGLE
+
+
+class RealtimeDataCustom2Flag(IntFlag):
+    """CMD_REALTIME_DATA_CUSTOM2 fields; firmware 2.74.2+, bit 6: 2.74.4+."""
+
+    FRAME_IMU_ANGLES = 1 << 0
+    FRAME_GYRO = 1 << 1
+    FRAME_ACC = 1 << 2
+    DEBUG = 1 << 3
+    MAG_SENS_DATA = 1 << 4
+    PIN_STATE = 1 << 5
+    STAB_ERR_AMPL = 1 << 6
+    INCLUDE_FLAGS = 1 << 31
+
+
+@dataclass(frozen=True, slots=True)
+class RealtimeImuState:
+    g_ref_error: int
+    h_ref_error: int
+    flags: int
+    ext_sensor_error: int
+    reserved: bytes
+
+
+@dataclass(frozen=True, slots=True)
+class RealtimePinState:
+    """Packed two-bit input states; unassigned/occupied inputs have value 2."""
+
+    extra_buttons_state: int
+    pin_state: int
+    reserved: bytes
+
+
+@dataclass(frozen=True, slots=True)
+class RealtimeDataCustom2:
+    flags: RealtimeDataCustom2Flag
+    timestamp_ms: int
+    fields: Mapping[RealtimeDataCustom2Flag, object]
+    raw_payload: bytes
+
+
+class PasswordProtectionFlag(IntFlag):
+    ENCRYPT_PARAMS = 1 << 1
+    SILENT = 1 << 2
+    CHANNEL_1_ENABLED = 1 << 4
+    CHANNEL_2_ENABLED = 1 << 5
+    CHANNEL_3_ENABLED = 1 << 6
+    CHANNEL_4_ENABLED = 1 << 7
+    CHANNEL_5_ENABLED = 1 << 8
+    CHANNEL_6_ENABLED = 1 << 9
+    CHANNEL_1_ALLOW_CONTROL = 1 << 10
+    CHANNEL_2_ALLOW_CONTROL = 1 << 11
+    CHANNEL_3_ALLOW_CONTROL = 1 << 12
+    CHANNEL_4_ALLOW_CONTROL = 1 << 13
+    CHANNEL_5_ALLOW_CONTROL = 1 << 14
+    CHANNEL_6_ALLOW_CONTROL = 1 << 15
+
+
+@dataclass(frozen=True, slots=True)
+class PasswordProtectionSettings:
+    flags: PasswordProtectionFlag
+    reserved: bytes = bytes(4)
 
 
 @dataclass(frozen=True, slots=True)
@@ -1041,6 +1110,7 @@ class BoardInfo3:
     can_driver_main_limit: int
     can_driver_aux_limit: int
     adjustable_variables_total: int
+    script_slot_sizes_ext: tuple[int, ...] = ()
 
 
 @dataclass(frozen=True, slots=True)
@@ -1190,12 +1260,39 @@ class TriggerPin(IntEnum):
     AUX_3 = 18
     BUZZER = 32
     SSAT_POWER = 33
+    CAN_DRV1_AUX1 = 64
+    CAN_DRV1_AUX2 = 65
+    CAN_DRV1_AUX3 = 66
+    CAN_DRV2_AUX1 = 67
+    CAN_DRV2_AUX2 = 68
+    CAN_DRV2_AUX3 = 69
+    CAN_DRV3_AUX1 = 70
+    CAN_DRV3_AUX2 = 71
+    CAN_DRV3_AUX3 = 72
+    CAN_DRV4_AUX1 = 73
+    CAN_DRV4_AUX2 = 74
+    CAN_DRV4_AUX3 = 75
+    CAN_DRV5_AUX1 = 76
+    CAN_DRV5_AUX2 = 77
+    CAN_DRV5_AUX3 = 78
+    CAN_DRV6_AUX1 = 79
+    CAN_DRV6_AUX2 = 80
+    CAN_DRV6_AUX3 = 81
+    CAN_DRV7_AUX1 = 82
+    CAN_DRV7_AUX2 = 83
+    CAN_DRV7_AUX3 = 84
+    CAN_IMU_AUX1 = 85
+    CAN_IMU_AUX2 = 86
+    CAN_IMU_FRAME_AUX1 = 88
+    CAN_IMU_FRAME_AUX2 = 89
 
 
 class TriggerPinState(IntEnum):
     LOW = 0
     HIGH = 1
     FLOATING = 2
+    PULLED_UP = 3
+    PULLED_DOWN = 4
 
 
 class ServoOutput(IntFlag):

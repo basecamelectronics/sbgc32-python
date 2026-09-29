@@ -710,7 +710,16 @@ class MessageDispatcher:
         if frame.command_id in (self.CMD_CONFIRM, self.CMD_ERROR):
             if not frame.payload:
                 return None
-            return ("command", frame.payload[0])
+            # Errors/confirmations name the request, even when its normal reply
+            # uses a different command (e.g. UDRV_DEVICE_SCAN 144 -> 96).
+            matches = [
+                pending
+                for pending in self._active_by_key.values()
+                if pending.transmitted and pending.command_id == frame.payload[0]
+            ]
+            if len(matches) == 1:
+                return matches[0].response_key
+            return None
 
         extractor = self._key_extractors.get(frame.command_id)
 

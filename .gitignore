@@ -37,5 +37,5 @@ CMakePresets.json
 CppProperties.json
 
 # Workspace for test
-/tests
+/tests/*
 Test.py

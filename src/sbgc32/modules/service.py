@@ -9,8 +9,14 @@ from math import isclose, isfinite
 from typing import TYPE_CHECKING, Callable, TypeVar
 
 from ..commands import Command, MenuCommands
+from ..crc import crc32
 from ..dispatcher import CommandTimeoutError
-from ..errors import CanDeviceNotFoundError, CanNotSupportedError, ExternalMotorNotFoundError
+from ..errors import (
+    CanDeviceNotFoundError,
+    CanNotSupportedError,
+    ControllerCommandError,
+    ExternalMotorNotFoundError,
+)
 from ..protocol import WireFrame
 from ..types import (
     AutoPid2Action,
@@ -29,6 +35,8 @@ from ..types import (
     MenuCommandFlag,
     MenuExecutionResult,
     MotorsOffMode,
+    PasswordProtectionFlag,
+    PasswordProtectionSettings,
     PidValues,
     ScriptDebugInfo,
     ServoOutput,
@@ -148,13 +156,20 @@ def _decode_board_info(frame: WireFrame) -> BoardInfo:
 
 
 def get_board_info(
-    self: SimpleBGC, *, cfg: int = 0, timeout: float | None = 1.0
+    self: SimpleBGC, *, cfg: int = 0, password: bytes | None = None, timeout: float | None = 1.0
 ) -> Future[BoardInfo]:
-    """Read the compact firmware and hardware identification record."""
+    """Read board information; optionally authenticate this port (2.73.6+).
+
+    Passwords are arbitrary 1..32 bytes; encode text explicitly before calling.
+    """
+
+    payload = struct.pack("<H", _uint(cfg, "cfg", 0xFFFF))
+    if password is not None:
+        payload += _password_payload(password)
 
     return self.request_raw(
         int(Command.CMD_BOARD_INFO),
-        struct.pack("<H", _uint(cfg, "cfg", 0xFFFF)),
+        payload,
         timeout=timeout,
         route="service",
         decoder=_decode_board_info,
@@ -177,6 +192,7 @@ def _decode_board_info_3(frame: WireFrame) -> BoardInfo3:
         value[19],
         value[20],
         value[21],
+        value[12:17],
     )
 
 
@@ -825,22 +841,55 @@ def sign_message(
 def _decode_can_device_scan(frame: WireFrame) -> CanDeviceScan:
     """Decode a scan reply and identify the firmware's empty no-device reply."""
 
-    if not frame.payload:
+    devices = _decode_can_devices(frame)
+    if not devices:
         raise CanDeviceNotFoundError("No CAN device replied to CMD_CAN_DEVICE_SCAN.")
+    return devices[0]
+
+
+def _decode_can_devices(frame: WireFrame) -> tuple[CanDeviceScan, ...]:
     if frame.command_id == 255:
-        error_code = frame.payload[1] if len(frame.payload) > 1 else None
-        detail = "" if error_code is None else f" (controller error code {error_code})"
-        raise CanDeviceNotFoundError(f"CAN device scan was rejected{detail}.")
-    return CanDeviceScan(*struct.unpack("<12sBB", _exact(14, "CAN_DEVICE_SCAN")(frame)))
+        error = decode_confirmation(frame)
+        raise ControllerCommandError(error.command_id, error.error_code, error.error_data)
+    if frame.command_id != int(Command.CMD_CAN_DEVICE_SCAN):
+        raise ValueError(f"expected CAN_DEVICE_SCAN response, got command {frame.command_id}")
+    if len(frame.payload) % 14:
+        raise ValueError("CAN_DEVICE_SCAN response must contain whole 14-byte records")
+    return tuple(
+        CanDeviceScan(*struct.unpack_from("<12sBB", frame.payload, offset))
+        for offset in range(0, len(frame.payload), 14)
+    )
+
+
+def scan_can_devices(
+    self: SimpleBGC, *, timeout: float | None = 1.0
+) -> Future[tuple[CanDeviceScan, ...]]:
+    """Return all CAN scan records, or an empty tuple when none were found.
+
+    A CMD_ERROR reply raises ControllerCommandError with the original code and data.
+    """
+
+    def scan() -> Future[tuple[CanDeviceScan, ...]]:
+        return self.request_raw(
+            int(Command.CMD_CAN_DEVICE_SCAN),
+            timeout=timeout,
+            route="service",
+            decoder=_decode_can_devices,
+        )
+
+    return _require_can_port(self, timeout=timeout, operation=scan)
 
 
 def scan_can_device(self: SimpleBGC, *, timeout: float | None = 1.0) -> Future[CanDeviceScan]:
-    """Scan the CAN bus and return the immediate scan status.
+    """Scan the CAN bus and return the first device (legacy single-device API).
+
+    Use scan_can_devices to receive every record when multiple devices exist.
 
     Raises :class:`CanNotSupportedError` when the controller has no CAN port.
     A successful scan with an unassigned ID is a valid result: it means the
     scan found a device that has not been assigned an ID yet. An empty reply
     means that no device answered and raises :class:`CanDeviceNotFoundError`.
+    A rejected scan raises :class:`ControllerCommandError` instead.
     """
 
     def scan() -> Future[CanDeviceScan]:
@@ -855,7 +904,7 @@ def scan_can_device(self: SimpleBGC, *, timeout: float | None = 1.0) -> Future[C
 
 
 def request_module_list(
-    self: SimpleBGC, max_devices: int = 13, *, timeout: float | None = 1.0
+    self: SimpleBGC, max_devices: int = 17, *, timeout: float | None = 1.0
 ) -> Future[tuple[CanModuleInfo, ...]]:
     """Read the list of modules currently discovered on the CAN bus.
 
@@ -863,15 +912,19 @@ def request_module_list(
     An empty tuple is a successful query with no attached CAN modules.
     """
 
-    max_devices = _uint(max_devices, "max_devices", 13)
+    max_devices = _uint(max_devices, "max_devices", 17)
     if max_devices < 1:
-        raise ValueError("max_devices must be in range 1..13")
+        raise ValueError("max_devices must be in range 1..17")
 
     def decode(frame: WireFrame) -> tuple[CanModuleInfo, ...]:
         if not frame.payload:
             raise ValueError("MODULE_LIST response is empty")
         records = frame.payload[1:]
-        if len(records) % 13 or len(records) // 13 > max_devices:
+        if (
+            len(records) % 13
+            or len(records) // 13 > max_devices
+            or frame.payload[0] != len(records) // 13
+        ):
             raise ValueError("invalid MODULE_LIST response")
         return tuple(
             CanModuleInfo(*struct.unpack_from("<BHHH6s", records, offset)[:4])
@@ -913,4 +966,168 @@ def read_transparent_command(
 
     return self.receive_unsolicited_raw(
         int(Command.CMD_TRANSPARENT_SAPI), timeout=timeout, route="service", decoder=decode
+    )
+
+
+def _password_payload(password: bytes) -> bytes:
+    if not isinstance(password, bytes) or not 1 <= len(password) <= 32:
+        raise ValueError("password must contain 1..32 bytes")
+    return bytes((len(password),)) + password
+
+
+def read_password_protection(
+    self: SimpleBGC, *, timeout: float | None = 1.0
+) -> Future[PasswordProtectionSettings]:
+    """Read password protection flags and reserved bytes (firmware 2.73.6+)."""
+
+    def decode(frame: WireFrame) -> PasswordProtectionSettings:
+        if frame.command_id != int(Command.CMD_PASS_PROTECT_READ):
+            error = decode_confirmation(frame)
+            raise ValueError(f"PASS_PROTECT_READ failed (controller error {error.error_code})")
+        flags, reserved = struct.unpack("<I4s", _exact(8, "PASS_PROTECT_READ")(frame))
+        return PasswordProtectionSettings(PasswordProtectionFlag(flags), reserved)
+
+    return self.request_raw(
+        int(Command.CMD_PASS_PROTECT_READ), timeout=timeout, route="service", decoder=decode
+    )
+
+
+def write_password_protection(
+    self: SimpleBGC,
+    flags: PasswordProtectionFlag | int,
+    *,
+    new_password: bytes | None = None,
+    timeout: float | None = 1.0,
+) -> Future[CommandConfirmation]:
+    """Update protection flags; None keeps the password unchanged (2.73.6+).
+
+    Authenticate with get_board_info(password=...) first on a protected port.
+    """
+    if isinstance(flags, bool) or not isinstance(flags, int):
+        raise TypeError("flags must be PasswordProtectionFlag bits")
+    payload = struct.pack("<I4x", _uint(int(flags), "flags", 0xFFFFFFFF))
+    payload += b"\0" if new_password is None else _password_payload(new_password)
+    return self.request_raw(
+        int(Command.CMD_PASS_PROTECT_WRITE),
+        payload,
+        timeout=timeout,
+        route="service",
+        decoder=decode_confirmation,
+    )
+
+
+def start_module_flash(
+    self: SimpleBGC, device_id: int, firmware_size_words: int, *, timeout: float | None = 5.0
+) -> Future[CommandConfirmation]:
+    """Start external CAN-module flashing. Size is in 32-bit words, not bytes.
+
+    Device IDs are MODULE_LIST IDs (1..17), not CAN_DEVICE_SCAN IDs.
+    Await and check the confirmation before writing any chunks.
+    """
+    payload = struct.pack(
+        "<BI", _module_id(device_id), _uint(firmware_size_words, "firmware_size_words", 0xFFFFFFFF)
+    )
+    if firmware_size_words == 0:
+        raise ValueError("firmware_size_words must be positive")
+    return self.request_raw(
+        int(Command.CMD_MODULE_FLASH_START),
+        payload,
+        timeout=timeout,
+        route="service",
+        decoder=decode_confirmation,
+    )
+
+
+def _module_id(device_id: int) -> int:
+    if not 1 <= _uint(device_id, "device_id", 17):
+        raise ValueError("device_id must be a MODULE_LIST ID in range 1..17")
+    return device_id
+
+
+def write_module_flash(
+    self: SimpleBGC,
+    device_id: int,
+    packet_id: int,
+    address: int,
+    data: bytes,
+    data_crc32: int | None = None,
+    *,
+    timeout: float | None = 5.0,
+) -> Future[CommandConfirmation]:
+    """Write 4..128 bytes, in multiples of four, at a byte offset in the file.
+
+    packet_id starts at zero and increments modulo 256. If data_crc32 is None,
+    CRC-32/ISO-HDLC is computed from data. Await each confirmation;
+    error_data preserves the device ID and packet ID reported by CMD_ERROR.
+    """
+    if not isinstance(data, bytes) or not 4 <= len(data) <= 128 or len(data) % 4:
+        raise ValueError("data must contain 4..128 bytes in multiples of four")
+    address = _uint(address, "address", 0xFFFFFFFF)
+    if address % 4 or address + len(data) > 0x100000000:
+        raise ValueError("address must be word-aligned and data must fit in the address space")
+    if data_crc32 is None:
+        data_crc32 = crc32(data)
+    payload = (
+        struct.pack(
+            "<BBII",
+            _module_id(device_id),
+            _uint(packet_id, "packet_id", 255),
+            address,
+            _uint(data_crc32, "data_crc32", 0xFFFFFFFF),
+        )
+        + data
+    )
+    return self.request_raw(
+        int(Command.CMD_MODULE_FLASH_WRITE),
+        payload,
+        timeout=timeout,
+        route="service",
+        decoder=decode_confirmation,
+    )
+
+
+def finish_module_flash(
+    self: SimpleBGC, device_id: int, file_crc32: int, *, timeout: float | None = 5.0
+) -> Future[CommandConfirmation]:
+    """Finish flashing with the bootloader CRC32 of the entire .bin file."""
+    payload = struct.pack("<BI", _module_id(device_id), _uint(file_crc32, "file_crc32", 0xFFFFFFFF))
+    return self.request_raw(
+        int(Command.CMD_MODULE_FLASH_FINISH),
+        payload,
+        timeout=timeout,
+        route="service",
+        decoder=decode_confirmation,
+    )
+
+
+def set_transparent_proxy(self: SimpleBGC, port1: int, port2: int) -> Future[None]:
+    """Bridge serial ports (2.74.5+); 0 selects the current port, other IDs start at 1.
+
+    Both ports must be enabled for Serial API. There is no success response:
+    completion only confirms transmission. CMD_ERROR, if any, is unsolicited.
+    The bridged ports subsequently forward raw data instead of Serial API.
+    """
+    payload = bytes((_uint(port1, "port1", 255), _uint(port2, "port2", 255)))
+    if port1 == port2:
+        raise ValueError("proxy ports must be different")
+    return self.send_raw(int(Command.CMD_SET_TRANSP_PROXY), payload, route="service")
+
+
+def scan_udrv_devices(
+    self: SimpleBGC, *, timeout: float | None = 5.0
+) -> Future[tuple[CanDeviceScan, ...]]:
+    """Scan uDrv modules, detect their IMU and automatically assign IDs.
+
+    Returns all 14-byte records from CMD_CAN_DEVICE_SCAN (#96). An empty tuple
+    means no devices were found. This command changes device assignments.
+    A CMD_ERROR reply raises ControllerCommandError; it is not treated as an
+    empty scan. Codes are command-specific and are preserved without translation.
+    """
+
+    return self.request_raw(
+        int(Command.CMD_UDRV_DEVICE_SCAN),
+        response_command_id=int(Command.CMD_CAN_DEVICE_SCAN),
+        timeout=timeout,
+        route="service",
+        decoder=_decode_can_devices,
     )

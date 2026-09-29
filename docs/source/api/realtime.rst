@@ -12,6 +12,11 @@ the decoder, while a missing response raises ``CommandTimeoutError``.
 .. autofunction:: sbgc32.modules.realtime.get_realtime_data_3
 .. autofunction:: sbgc32.modules.realtime.get_realtime_data_4
 .. autofunction:: sbgc32.modules.realtime.get_realtime_data_custom
+.. autofunction:: sbgc32.modules.realtime.get_realtime_data_custom2
+.. autofunction:: sbgc32.modules.realtime.parse_realtime_data_custom
+.. autofunction:: sbgc32.modules.realtime.parse_realtime_data_custom2
+.. autofunction:: sbgc32.modules.realtime.realtime_data_custom_payload_size
+.. autofunction:: sbgc32.modules.realtime.realtime_data_custom2_payload_size
 .. autofunction:: sbgc32.modules.realtime.read_rc_inputs
 .. autofunction:: sbgc32.modules.realtime.get_control_quat_status
 .. autofunction:: sbgc32.modules.realtime.start_data_stream

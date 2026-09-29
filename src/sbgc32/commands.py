@@ -2,10 +2,10 @@ from enum import IntEnum
 
 
 class Command(IntEnum):
-    """SerialAPI command IDs from ``vendor/serialAPI/core/core.h``.
+    """SerialAPI command IDs, including the September 11, 2026 specification.
 
     Members are deliberately sorted by their numeric wire value. Values that
-    the vendored SerialAPI header does not assign are not invented here.
+    specification does not assign are not invented here.
     ``CMD_CONFIRM`` and ``CMD_ERROR`` are board responses and are kept in
     :class:`ResponseCommand`.
     """
@@ -70,9 +70,12 @@ class Command(IntEnum):
     CMD_GYRO_CORRECTION = 75
     CMD_MODULE_LIST = 76
     CMD_MOTORS_ON = 77
+    CMD_MODULE_FLASH_START = 78
     CMD_CALIB_OFFSET = 79
     CMD_CALIB_POLES = 80
+    CMD_MODULE_FLASH_WRITE = 81
     CMD_READ_PARAMS = 82
+    CMD_MODULE_FLASH_FINISH = 83
     CMD_TRIGGER_PIN = 84
     CMD_DATA_STREAM_INTERVAL = 85
     CMD_BOARD_INFO = 86
@@ -121,9 +124,14 @@ class Command(IntEnum):
     CMD_SERVO_OUT_EXT = 133
     CMD_SET_ADJ_VARS_VAL_F = 134
     CMD_GET_ADJ_VARS_VAL_F = 135
+    CMD_PASS_PROTECT_READ = 136
+    CMD_PASS_PROTECT_WRITE = 137
+    CMD_REALTIME_DATA_CUSTOM2 = 139
     CMD_CONTROL_QUAT = 140
     CMD_CONTROL_QUAT_STATUS = 141
     CMD_CONTROL_QUAT_CONFIG = 142
+    CMD_SET_TRANSP_PROXY = 143
+    CMD_UDRV_DEVICE_SCAN = 144
     CMD_EXT_SENS_CMD = 150
     CMD_TRANSPARENT_SAPI = 151
     CMD_SET_DEBUG_PORT = 249

@@ -1,8 +1,11 @@
-"""Exceptions that describe unavailable controller hardware features."""
+"""Controller rejections and unavailable hardware features."""
 
 from __future__ import annotations
 
+from .commands import Command
+
 __all__ = [
+    "ControllerCommandError",
     "CanDeviceNotFoundError",
     "CanNotSupportedError",
     "ExternalMotorNotFoundError",
@@ -11,6 +14,23 @@ __all__ = [
     "is_external_motor_not_found_error",
     "is_module_not_connected_error",
 ]
+
+
+class ControllerCommandError(RuntimeError):
+    """A CMD_ERROR reply, preserving the command-specific error code and data."""
+
+    def __init__(self, command_id: int, error_code: int, error_data: bytes = b"") -> None:
+        self.command_id = command_id
+        self.error_code = error_code
+        self.error_data = bytes(error_data)
+        try:
+            command_name = Command(command_id).name
+        except ValueError:
+            command_name = "command"
+        super().__init__(
+            f"Controller rejected {command_name} (#{command_id}): "
+            f"error code {error_code}, error_data={self.error_data.hex(' ') or '<empty>'}"
+        )
 
 
 class CanNotSupportedError(RuntimeError):

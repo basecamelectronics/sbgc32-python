@@ -12,7 +12,7 @@ from wheel.bdist_wheel import bdist_wheel
 README = Path(__file__).with_name("README.md").read_text(encoding="utf-8")
 
 PACKAGE_NAME = "sbgc32"
-VERSION = os.environ.get("SBGC32_VERSION", "1.0.0").lstrip("v")
+VERSION = os.environ.get("SBGC32_VERSION", "1.1.0").lstrip("v")
 
 PROTOCOL_LIBRARY = {
     "win32": "_native/sbgc_python_protocol.dll",

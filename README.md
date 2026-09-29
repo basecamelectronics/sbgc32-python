@@ -27,7 +27,9 @@ from sbgc32 import SimpleBGC
 ```
 
 Use example QuickStart to print board info and angles.
+
 Use example Motors to rotate the gimbal along the axis yaw on 35 degrees.
+
 Use example BodeTestAutomation to analyze motors and tune PID. To use this example
 with graphics, download and import numpy and matplotlib:
 
@@ -47,9 +49,7 @@ Files Description
 
 [`src/sbgc32/modules`](src/sbgc32/modules/) - modules from SerialAPI;
 
-[`native/`](native/) - C bridge between Python and the codec SerialAPI;
-
-[`vendor/serialAPI/`](vendor/serialAPI/) - vendored BaseCam SimpleBGC32 Serial API C library;
+[`native/`](native/) - C protocol codec and its local headers;
 
 [`pyproject.toml`](pyproject.toml) - Python package metadata and dependencies;
 
@@ -113,7 +113,7 @@ cmake --build build/native --config Release
 
 The result is written to `src\sbgc32\_native\`
 
-Rebuild the DLL after changing a file in `native/` or in `vendor/`.
+Rebuild the DLL after changing a source or header in `native/`.
 
 #### CMake cannot find a C compiler
 
