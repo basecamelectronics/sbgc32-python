@@ -27,6 +27,7 @@ Examples
    :maxdepth: 1
 
    examples/bode_test_automation
+   examples/can_motor_tester
    api_update_2026
 
 .. toctree::

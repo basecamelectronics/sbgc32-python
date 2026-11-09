@@ -419,36 +419,52 @@ def ext_motors_action(
 
 def control_ext_motors(
     self: SimpleBGC,
-    control: ExternalMotorControl,
+    control: ExternalMotorControl | tuple[ExternalMotorControl, ...],
     motors: int,
     data_set: ExternalMotorParameter | int = 0,
     *,
     need_confirmation: bool = False,
     timeout: float | None = 1.0,
 ) -> Future[CommandConfirmation | None]:
-    """Set extra-motor setpoint data for the three protocol motor slots."""
+    """Set one record per selected external motor (IDs 1 through 7).
 
-    if not isinstance(control, ExternalMotorControl):
-        raise TypeError("control must be an ExternalMotorControl")
+    A single ``ExternalMotorControl`` applies the same values to every selected
+    motor. A tuple supplies individual values in ascending motor-ID order,
+    with exactly one entry for each set bit in ``motors``. Values use raw
+    protocol units. PARAM1_16BIT and PARAM1_32BIT are mutually exclusive.
+    """
+
     selected = _validate_int(int(motors), "motors", 1, 0x7F)
     parameters = _validate_int(int(data_set), "data_set", 0, 0x07)
+    if parameters & 0x06 == 0x06:
+        raise ValueError("PARAM1_16BIT and PARAM1_32BIT are mutually exclusive")
+    if isinstance(control, ExternalMotorControl):
+        controls = (control,) * selected.bit_count()
+    elif isinstance(control, tuple) and all(
+        isinstance(item, ExternalMotorControl) for item in control
+    ):
+        controls = control
+    else:
+        raise TypeError("control must be an ExternalMotorControl or a tuple of them")
+    if len(controls) != selected.bit_count():
+        raise ValueError("control must contain one entry per selected motor")
     if type(need_confirmation) is not bool:
         raise TypeError("need_confirmation must be bool")
     if need_confirmation:
         selected |= _EXT_MOTOR_NEED_CONFIRM
     setpoint_size = 4 if parameters & int(ExternalMotorParameter.SETPOINT_32BIT) else 2
-    setpoint = _validate_int(
-        control.setpoint,
-        "setpoint",
-        -(1 << (setpoint_size * 8 - 1)),
-        (1 << (setpoint_size * 8 - 1)) - 1,
-    )
     param_size = 2 if parameters & int(ExternalMotorParameter.PARAM1_16BIT) else 4
-    param1 = _validate_int(
-        control.param1, "param1", -(1 << (param_size * 8 - 1)), (1 << (param_size * 8 - 1)) - 1
-    )
     payload = bytearray((selected, parameters))
-    for _ in range(3):
+    for item in controls:
+        setpoint = _validate_int(
+            item.setpoint,
+            "setpoint",
+            -(1 << (setpoint_size * 8 - 1)),
+            (1 << (setpoint_size * 8 - 1)) - 1,
+        )
+        param1 = _validate_int(
+            item.param1, "param1", -(1 << (param_size * 8 - 1)), (1 << (param_size * 8 - 1)) - 1
+        )
         payload.extend(struct.pack("<i" if setpoint_size == 4 else "<h", setpoint))
         if parameters & int(ExternalMotorParameter.PARAM1_16BIT):
             payload.extend(struct.pack("<h", param1))

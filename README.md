@@ -38,6 +38,15 @@ pip install numpy
 pip install matplotlib
 ```
 
+Use example CAN_MotorTester to provides a graphical interface 
+for monitoring and controlling two external motor channels. 
+For more information see README in `examples\CAN_MotorTester`. Run with:
+
+```powershell
+py .\examples\CAN_MotorTester\app.py
+```
+
+
 Files Description
 -----------
 

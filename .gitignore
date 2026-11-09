@@ -36,6 +36,13 @@ CMakePresets.json
 .vscode/
 CppProperties.json
 
+# Runtime logs and rotated copies
+*.log
+*.log.*
+motor-state.log*
+
 # Workspace for test
 /tests/*
+/dist
+!/tests/test_ext_motors_control.py
 Test.py
