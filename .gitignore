@@ -44,5 +44,4 @@ motor-state.log*
 # Workspace for test
 /tests/*
 /dist
-!/tests/test_ext_motors_control.py
 Test.py
