@@ -16,7 +16,7 @@ def probe(port):
             print(f"Module list: {type(error).__name__}: {error}", flush=True)
         for mask in (1, 2):
             # Request only CONTROL_MODE first; then compare with the full set.
-            for data_set in (1, 0xFFFFF):
+            for data_set in (1, 0x1FFFFF):
                 payload = struct.pack("<BI", mask, data_set)
                 print(f"CMD=131 request={payload.hex(' ')}", flush=True)
                 try:

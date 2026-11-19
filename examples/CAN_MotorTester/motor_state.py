@@ -1,12 +1,11 @@
 """External motor telemetry, using sbgc32 for all protocol requests."""
 
 import logging
-import math
-import struct
 
-DATA_SET = (1 << 20) - 1
-# Fields in DATA_SET bit order (Serial API specification, pages 50–51).
-STATE = struct.Struct("<Bhhhh iihhii HHHHHHHbb")
+from motor_telemetry import STATE as STATE
+from motor_telemetry import decode_state
+
+DATA_SET = (1 << 21) - 1
 # sbgc32 checks the response length excluding MOTOR_ID, including DATA_SET.
 RESULT_SIZE = 4 + STATE.size
 RESPONSE_TIMEOUT = 1.0
@@ -15,8 +14,10 @@ logger = logging.getLogger(__name__)
 
 
 def format_state(payload):
-    if len(payload) != STATE.size:
-        raise ValueError(f"Expected {STATE.size} state bytes, received {len(payload)}")
+    return format_values(decode_state(payload))
+
+
+def format_values(values):
     (
         mode,
         torque,
@@ -30,6 +31,7 @@ def format_state(payload):
         angle,
         angle_target,
         flags,
+        default_speed,
         max_speed,
         acceleration,
         jerk,
@@ -38,36 +40,37 @@ def format_state(payload):
         voltage,
         motor_temp,
         driver_temp,
-    ) = STATE.unpack(payload)
+    ) = values
+    mode, flags = int(mode), int(flags)
     modes = {0: "Position", 1: "Speed", 2: "Torque"}
     states = ("Off / brake", "On", "Off / floating", "Off / safe stop")
     return (
         f"{modes.get(mode, f'Unknown ({mode})')} | {states[flags & 3]} | Index: {bool(flags & 4)}\n"
-        f"Angle: {angle * 360 / 2**20:.2f}° | Target: {angle_target * 360 / 2**20:.2f}°\n"
-        f"Speed: {math.degrees(speed / 1e6):.2f}°/s | Target: {math.degrees(speed_target / 1e6):.2f}°/s\n"
-        f"Torque: {torque / 32767:.1%} | Target: {torque_target / 32767:.1%}\n"
-        f"Limits: {max_speed * 2}°/s, {acceleration * 2}°/s², torque {max_torque / 65535:.1%} | Jerk: {jerk} ms\n"
-        f"Current: {current} mA | Voltage: {voltage / 1000:.2f} V\n"
-        f"Temperature: motor {motor_temp}°C / driver {driver_temp}°C"
+        f"Angle: {angle:.2f}° | Target: {angle_target:.2f}°\n"
+        f"Speed: {speed:.2f} rpm | Target: {speed_target:.2f} rpm\n"
+        f"Torque: {torque:.1f}% | Target: {torque_target:.1f}%\n"
+        f"Default speed: {default_speed:.2f} rpm\n"
+        f"Limits: {max_speed:.2f} rpm, {acceleration:.2f} rpm/s, torque {max_torque:.1f}% | Jerk: {jerk:g} ms\n"
+        f"Current: {current:g} mA | Voltage: {voltage:.2f} V\n"
+        f"Temperature: motor {motor_temp:g}°C / driver {driver_temp:g}°C"
     )
 
 
 def angles16(payload):
-    if len(payload) != STATE.size:
-        raise ValueError(f"Expected {STATE.size} state bytes, received {len(payload)}")
-    values = STATE.unpack(payload)
-    return values[7] * 360 / 16384, values[8] * 360 / 16384
+    values = decode_state(payload)
+    return values[7], values[8]
 
 
 class MotorReader:
     """Serialize state requests: library matches replies by command, not motor ID."""
 
-    def __init__(self, device, enabled, emit):
+    def __init__(self, device, enabled, emit, sample_emit=None):
         self.device = device
         self.enabled = enabled
         self.due = [0.0, 0.0]
         self.emit = emit
         self.pending = None
+        self.sample_emit = sample_emit
 
     def tick(self, now):
         if self.pending is not None:
@@ -76,11 +79,13 @@ class MotorReader:
                 return
             self.pending = None
             actual = target = flags = None
+            values = None
             try:
                 payload = future.result()
-                message = format_state(payload)
-                actual, target = angles16(payload)
-                flags = STATE.unpack(payload)[11]
+                values = decode_state(payload)
+                message = format_values(values)
+                actual, target = values[7:9]
+                flags = int(values[11])
             except Exception as error:
                 logger.warning("DRV%d state failed: %s: %s", index + 1, type(error).__name__, error)
                 if isinstance(error, TimeoutError):
@@ -93,6 +98,8 @@ class MotorReader:
                     message = f"Unavailable — {type(error).__name__}: {error}"
             if self.enabled[index].is_set():
                 self.emit(("motor", (index, message, actual, target, flags)))
+                if self.sample_emit is not None:
+                    self.sample_emit(index, now, values)
         ready = [i for i in range(2) if self.enabled[i].is_set() and now >= self.due[i]]
         if not ready:
             return
@@ -112,6 +119,8 @@ class MotorReader:
             )
             self.pending = (index, future)
         except Exception as error:
+            if self.sample_emit is not None:
+                self.sample_emit(index, now, None)
             self.emit(
                 (
                     "motor",

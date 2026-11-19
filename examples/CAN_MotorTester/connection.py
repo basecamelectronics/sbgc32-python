@@ -3,6 +3,8 @@
 import logging
 
 from sbgc32 import SimpleBGC
+from sbgc32.modules.realtime import decode_confirmation
+from motor_protocol import ExternalMotorsControlConfig
 
 logger = logging.getLogger(__name__)
 
@@ -41,6 +43,17 @@ def state_decoder(decoder):
 
 
 class DiagnosticSimpleBGC(SimpleBGC):
+    def configure_ext_motors(self, config, *, need_confirmation=False, timeout=1.0):
+        # Released wheels use the old five-field layout; the revised firmware
+        # inserts DEFAULT_SPEED at bit 1 and supports Restore RC (255).
+        if not isinstance(config, ExternalMotorsControlConfig):
+            raise TypeError("config must be the tester's ExternalMotorsControlConfig")
+        payload = config.encode(need_confirmation=need_confirmation)
+        if need_confirmation:
+            return self.request_raw(130, payload, timeout=timeout, route="control",
+                                    decoder=decode_confirmation)
+        return self.send_raw(130, payload, route="control")
+
     def request_raw(self, command_id, payload=b"", **kwargs):
         if command_id == 131:
             kwargs["decoder"] = state_decoder(kwargs.get("decoder"))

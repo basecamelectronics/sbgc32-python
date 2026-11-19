@@ -2,18 +2,22 @@
 
 import queue
 import tkinter as tk
+from decimal import ROUND_HALF_UP, Decimal, InvalidOperation
 from tkinter import ttk
 
-from sbgc32 import ConfirmationStatus, ExternalMotorsControlConfig
+from sbgc32 import ConfirmationStatus
+from motor_protocol import ExternalMotorsControlConfig
 
 FIELDS = (
     ("mode", "Mode"),
-    ("max_speed", "Max speed (×2 °/s)"),
-    ("max_acceleration", "Max acceleration (×2 °/s²)"),
+    ("default_speed", "Default speed (rpm)"),
+    ("max_speed", "Max speed (rpm)"),
+    ("max_acceleration", "Max acceleration (rpm/s)"),
     ("jerk_slope", "Jerk slope (ms)"),
     ("max_torque", "Max torque (0–65535)"),
 )
-MODES = ("Position", "Speed", "Torque")
+MODE_VALUES = {"Position": 0, "Speed": 1, "Torque": 2, "Restore RC (255)": 255}
+MODES = tuple(MODE_VALUES)
 
 
 def build_config(index, selected, values):
@@ -24,7 +28,18 @@ def build_config(index, selected, values):
             continue
         mask |= 1 << bit
         if name == "mode":
-            parameters[name] = MODES.index(text)
+            if text not in MODE_VALUES:
+                raise ValueError("Select a valid mode")
+            parameters[name] = MODE_VALUES[text]
+        elif name in ("default_speed", "max_speed", "max_acceleration"):
+            try:
+                value = Decimal(text)
+            except InvalidOperation:
+                raise ValueError(f"{label}: enter a number in 0–21845") from None
+            if not value.is_finite() or not 0 <= value <= 21845:
+                raise ValueError(f"{label}: enter a number in 0–21845")
+            # Both protocol limits use 1/3 of the displayed unit per raw step.
+            parameters[name] = int((value * 3).to_integral_value(rounding=ROUND_HALF_UP))
         else:
             try:
                 value = int(text)
@@ -44,7 +59,7 @@ class ConfigPanel(ttk.LabelFrame):
         self.index, self.submit = index, submit
         self.connected = self.busy = False
         self.selected = [tk.BooleanVar(value=False) for _ in FIELDS]
-        self.values = [tk.StringVar(value="Position" if i == 0 else "0") for i in range(5)]
+        self.values = [tk.StringVar(value="Position" if i == 0 else "0") for i in range(len(FIELDS))]
         self.inputs = []
         self.columnconfigure(1, weight=1)
         for row, ((name, label), selected, value) in enumerate(
@@ -61,10 +76,13 @@ class ConfigPanel(ttk.LabelFrame):
             entry.grid(row=row, column=1, sticky="ew", padx=(8, 0), pady=3)
             self.inputs.append(entry)
         self.button = ttk.Button(self, text=f"Send DRV{index + 1} config", command=self.send)
-        self.button.grid(row=5, column=0, columnspan=2, sticky="ew", pady=8)
+        self.button.grid(row=len(FIELDS), column=0, columnspan=2, sticky="ew", pady=8)
         self.status = tk.StringVar(value="Check fields to include in DATA_SET")
         label = ttk.Label(self, textvariable=self.status, wraplength=300)
-        label.grid(row=6, column=0, columnspan=2, sticky="ew")
+        label.grid(row=len(FIELDS) + 1, column=0, columnspan=2, sticky="ew")
+        ttk.Label(self, text="Restore RC: restore saved mode and assigned RC input.\n"
+                  "Stop setpoint sending before applying.", wraplength=300).grid(
+                      row=len(FIELDS) + 2, column=0, columnspan=2, sticky="w")
         self.bind("<Configure>", lambda event: label.config(wraplength=max(100, event.width - 20)))
         self.refresh()
 

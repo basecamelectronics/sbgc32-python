@@ -1,0 +1,4 @@
+# Optional dependencies for the separate telemetry window.
+pyqtgraph==0.14.0
+PySide6>=6.5,<7
+numpy>=1.25

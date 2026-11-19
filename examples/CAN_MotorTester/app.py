@@ -8,7 +8,7 @@ import tkinter as tk
 from logging.handlers import RotatingFileHandler
 from pathlib import Path
 from time import monotonic
-from tkinter import ttk
+from tkinter import messagebox, ttk
 
 from connection import DiagnosticSimpleBGC as SimpleBGC
 from motor_actions import ACTIONS, ActionRunner
@@ -16,6 +16,7 @@ from motor_config import ConfigPanel, ConfigRunner
 from motor_control import ControlSender
 from motor_state import MotorReader
 from motor_status import MotorStatus
+from plot_bridge import PlotBridge
 from serial.tools import list_ports
 
 CONNECTION_TIMEOUT = 5.0
@@ -97,6 +98,7 @@ class Monitor(tk.Tk):
         self.reset_requested = threading.Event()
         self.worker = None
         self.closing = False
+        self.plotter = PlotBridge()
         self.protocol("WM_DELETE_WINDOW", self.close_window)
 
         toolbar = ttk.Frame(self, padding=16)
@@ -112,10 +114,14 @@ class Monitor(tk.Tk):
             toolbar, text="Reset SBGC", state="disabled", command=self.request_reset
         )
         self.reset_button.pack(side="left", padx=8)
+        self.graph_button = ttk.Button(toolbar, text="Show graphs", command=self.toggle_graphs)
+        self.graph_button.pack(side="left")
         self.board = tk.StringVar(value="Board: —    Firmware: —")
         ttk.Label(self, textvariable=self.board, padding=(16, 0), font=("Segoe UI", 12)).pack(
             anchor="w"
         )
+        self.graph_status = tk.StringVar(value="Graphs closed")
+        ttk.Label(self, textvariable=self.graph_status, padding=(16, 0)).pack(anchor="w")
         body = ttk.Frame(self, padding=(12, 8))
         body.pack(fill="both", expand=True)
         body.columnconfigure(0, weight=1)
@@ -290,9 +296,26 @@ class Monitor(tk.Tk):
             self.motor_text[index].set("Waiting for data…" if self.connected else "Disconnected")
         else:
             self.motor_enabled[index].clear()
+            self.plotter.publish(index, monotonic(), None)
             self.motor_text[index].set("Polling disabled")
             self.dials[index].update_angles(None, None)
             self.motor_status_blocks[index].set_flags(None)
+
+    def toggle_graphs(self):
+        if self.plotter.active:
+            self.plotter.stop()
+            self.graph_status.set("Closing graphs…")
+            self.graph_button.config(state="disabled")
+            return
+        try:
+            self.plotter.start()
+        except Exception as error:
+            logger.exception("Could not start graph window")
+            self.graph_status.set("Graphs unavailable — see installation instructions")
+            messagebox.showerror("Telemetry graphs", str(error), parent=self)
+            return
+        self.graph_status.set("Starting graphs…")
+        self.graph_button.config(text="Close graphs")
 
     def request_reset(self):
         if not self.connected or self.stop.is_set() or self.reset_requested.is_set():
@@ -404,6 +427,8 @@ class Monitor(tk.Tk):
     def toggle_connection(self):
         if self.worker is not None:
             self.stop.set()
+            for index in range(2):
+                self.plotter.publish(index, monotonic(), None)
             self.connect.config(state="disabled")
             self.connected = False
             self.update_control()
@@ -415,6 +440,7 @@ class Monitor(tk.Tk):
             return
         self.stop.clear()
         self.reset_requested.clear()
+        self.plotter.reset()
         self.control_sender = ControlSender()
         self.control_running = False
         self.control_stopping = False
@@ -448,7 +474,12 @@ class Monitor(tk.Tk):
                 phase = "communicating with controller"
                 if not self.stop.is_set():
                     self.events.put(("board", (board.board_version, board.firmware_version)))
-                motors = MotorReader(gimbal, self.motor_enabled, self.events.put)
+                motors = MotorReader(
+                    gimbal,
+                    self.motor_enabled,
+                    self.events.put,
+                    sample_emit=lambda i, t, values: self.events.put(("telemetry", (i, t, values))),
+                )
                 actions = ActionRunner(gimbal, self.action_requests, self.events.put)
                 configs = ConfigRunner(gimbal, self.config_requests, self.events.put)
                 while not self.stop.is_set():
@@ -478,6 +509,27 @@ class Monitor(tk.Tk):
             )
 
     def process_events(self):
+        plot_events = self.plotter.poll()
+        for kind, detail in plot_events:
+            if kind == "error":
+                logger.error("Graph window failed: %s", detail)
+                self.graph_status.set("Graph window failed — see motor-state.log")
+            elif kind == "ready":
+                self.graph_status.set(detail)
+            elif kind == "closed":
+                if not self.graph_status.get().startswith("Graph window failed"):
+                    self.graph_status.set(detail)
+                self.graph_button.config(
+                    text="Show graphs", state="disabled" if self.closing else "normal"
+                )
+        if (
+            self.plotter.active
+            and self.plotter.dropped
+            and not self.graph_status.get().startswith("Graph window failed")
+        ):
+            self.graph_status.set(
+                f"Graphs: {self.plotter.dropped} display samples skipped (viewer busy)"
+            )
         try:
             while True:
                 kind, data = self.events.get_nowait()
@@ -493,6 +545,10 @@ class Monitor(tk.Tk):
                             if self.motor_enabled[index].is_set()
                             else "Polling disabled"
                         )
+                elif kind == "telemetry" and not self.stop.is_set():
+                    index, timestamp, values = data
+                    if self.motor_enabled[index].is_set():
+                        self.plotter.publish(index, timestamp, values)
                 elif kind == "motor" and not self.stop.is_set():
                     index, message, actual, target, flags = data
                     if self.motor_enabled[index].is_set():
@@ -518,6 +574,8 @@ class Monitor(tk.Tk):
                 elif kind == "error":
                     self.status.set(f"Connection error: {data}")
                 elif kind == "done":
+                    for index in range(2):
+                        self.plotter.publish(index, monotonic(), None)
                     self.worker = None
                     self.connected = False
                     self.control_stopping = False
@@ -541,13 +599,15 @@ class Monitor(tk.Tk):
                         self.status.set(data or "Disconnected")
         except queue.Empty:
             pass
-        if self.closing and self.worker is None:
+        if self.closing and self.worker is None and not self.plotter.active:
             self.destroy()
             return
         self.after(10, self.process_events)
 
     def close_window(self):
         self.closing = True
+        self.plotter.stop()
+        self.graph_button.config(state="disabled")
         self.connected = False
         self.update_control()
         self.update_action_buttons()
