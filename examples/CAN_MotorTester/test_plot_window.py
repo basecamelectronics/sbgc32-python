@@ -107,10 +107,16 @@ class PlotWindowTests(unittest.TestCase):
 
         # Reproduce the log: absent DRV2 delays each valid DRV1 reply by ~1 s.
         for sequence in range(3):
-            self.window.samples.put((
-                "sample", 0, 0, self.window.origin + sequence * 1.1,
-                sequence, (10 + sequence,) * 21,
-            ))
+            self.window.samples.put(
+                (
+                    "sample",
+                    0,
+                    0,
+                    self.window.origin + sequence * 1.1,
+                    sequence,
+                    (10 + sequence,) * 21,
+                )
+            )
         self.window.tick()
         curve = self.window.chart.curves[0]
         np.testing.assert_allclose(curve.yData, [10, 11, 12])

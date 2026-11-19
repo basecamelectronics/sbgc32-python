@@ -34,8 +34,9 @@ class ExternalMotorsControlConfig:
             if mode not in (0, 1, 2, 255):
                 raise ValueError("mode must be Position, Speed, Torque or Restore RC")
             payload.append(mode)
-        for bit, name in enumerate(("default_speed", "max_speed", "max_acceleration",
-                                    "jerk_slope", "max_torque"), start=1):
+        for bit, name in enumerate(
+            ("default_speed", "max_speed", "max_acceleration", "jerk_slope", "max_torque"), start=1
+        ):
             if mask & (1 << bit):
                 payload.extend(struct.pack("<H", _uint(getattr(self, name), name, 65535)))
         return bytes(payload)

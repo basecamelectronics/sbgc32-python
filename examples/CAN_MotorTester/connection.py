@@ -2,9 +2,10 @@
 
 import logging
 
+from motor_protocol import ExternalMotorsControlConfig
+
 from sbgc32 import SimpleBGC
 from sbgc32.modules.realtime import decode_confirmation
-from motor_protocol import ExternalMotorsControlConfig
 
 logger = logging.getLogger(__name__)
 
@@ -50,8 +51,9 @@ class DiagnosticSimpleBGC(SimpleBGC):
             raise TypeError("config must be the tester's ExternalMotorsControlConfig")
         payload = config.encode(need_confirmation=need_confirmation)
         if need_confirmation:
-            return self.request_raw(130, payload, timeout=timeout, route="control",
-                                    decoder=decode_confirmation)
+            return self.request_raw(
+                130, payload, timeout=timeout, route="control", decoder=decode_confirmation
+            )
         return self.send_raw(130, payload, route="control")
 
     def request_raw(self, command_id, payload=b"", **kwargs):

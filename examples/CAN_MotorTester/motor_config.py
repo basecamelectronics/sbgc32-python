@@ -5,8 +5,9 @@ import tkinter as tk
 from decimal import ROUND_HALF_UP, Decimal, InvalidOperation
 from tkinter import ttk
 
-from sbgc32 import ConfirmationStatus
 from motor_protocol import ExternalMotorsControlConfig
+
+from sbgc32 import ConfirmationStatus
 
 FIELDS = (
     ("mode", "Mode"),
@@ -59,7 +60,9 @@ class ConfigPanel(ttk.LabelFrame):
         self.index, self.submit = index, submit
         self.connected = self.busy = False
         self.selected = [tk.BooleanVar(value=False) for _ in FIELDS]
-        self.values = [tk.StringVar(value="Position" if i == 0 else "0") for i in range(len(FIELDS))]
+        self.values = [
+            tk.StringVar(value="Position" if i == 0 else "0") for i in range(len(FIELDS))
+        ]
         self.inputs = []
         self.columnconfigure(1, weight=1)
         for row, ((name, label), selected, value) in enumerate(
@@ -80,9 +83,12 @@ class ConfigPanel(ttk.LabelFrame):
         self.status = tk.StringVar(value="Check fields to include in DATA_SET")
         label = ttk.Label(self, textvariable=self.status, wraplength=300)
         label.grid(row=len(FIELDS) + 1, column=0, columnspan=2, sticky="ew")
-        ttk.Label(self, text="Restore RC: restore saved mode and assigned RC input.\n"
-                  "Stop setpoint sending before applying.", wraplength=300).grid(
-                      row=len(FIELDS) + 2, column=0, columnspan=2, sticky="w")
+        ttk.Label(
+            self,
+            text="Restore RC: restore saved mode and assigned RC input.\n"
+            "Stop setpoint sending before applying.",
+            wraplength=300,
+        ).grid(row=len(FIELDS) + 2, column=0, columnspan=2, sticky="w")
         self.bind("<Configure>", lambda event: label.config(wraplength=max(100, event.width - 20)))
         self.refresh()
 

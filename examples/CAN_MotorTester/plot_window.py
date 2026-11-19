@@ -15,8 +15,16 @@ from plot_history import PlotHistory
 
 DEFAULT_SIGNALS = (5, 6, 9, 10, 1, 2, 17, 18, 19, 20)
 COLORS = (
-    "#2563eb", "#c2410c", "#15803d", "#be185d", "#a16207",
-    "#7e22ce", "#0f766e", "#b91c1c", "#475569", "#4338ca",
+    "#2563eb",
+    "#c2410c",
+    "#15803d",
+    "#be185d",
+    "#a16207",
+    "#7e22ce",
+    "#0f766e",
+    "#b91c1c",
+    "#475569",
+    "#4338ca",
 )
 
 
@@ -104,8 +112,9 @@ class TelemetryPlot(QtWidgets.QWidget):
         self.plot.getAxis("left").enableAutoSIPrefix(False)
         self.plot.getAxis("left").setWidth(85)
         self.plot.getAxis("bottom").enableAutoSIPrefix(False)
-        self.plot.addLegend(offset=(10, 5), labelTextColor="#334155",
-                            brush=pg.mkBrush(255, 255, 255, 230))
+        self.plot.addLegend(
+            offset=(10, 5), labelTextColor="#334155", brush=pg.mkBrush(255, 255, 255, 230)
+        )
         layout.addWidget(self.plot, 1)
         self.add_button.clicked.connect(lambda: self.add_signal())
         for field in DEFAULT_SIGNALS[:2]:
@@ -130,9 +139,7 @@ class TelemetryPlot(QtWidgets.QWidget):
         curve.setClipToView(True)
         curve.isolated_points = pg.ScatterPlotItem(size=5, pen=None, brush=color)
         self.plot.addItem(curve.isolated_points)
-        curve.visibleChanged.connect(
-            lambda: curve.isolated_points.setVisible(curve.isVisible())
-        )
+        curve.visibleChanged.connect(lambda: curve.isolated_points.setVisible(curve.isVisible()))
         self.selectors.append(selector)
         self.curves.append(curve)
         selector.enabled.toggled.connect(self.changed)
@@ -219,7 +226,9 @@ class TelemetryPlot(QtWidgets.QWidget):
                 isolated[1:] &= ~(finite[:-1] & close)
                 isolated[:-1] &= ~(finite[1:] & close)
             curve.setData(
-                data[:, 0] - origin, values, connect="finite",
+                data[:, 0] - origin,
+                values,
+                connect="finite",
             )
             curve.isolated_points.setData(data[isolated, 0] - origin, values[isolated])
 

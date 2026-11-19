@@ -7,6 +7,7 @@ from motor_config import build_config
 from motor_protocol import ExternalMotorsControlConfig
 from motor_state import DATA_SET, RESULT_SIZE, format_state
 from motor_telemetry import STATE, decode_state
+
 from sbgc32.protocol import WireFrame
 
 
@@ -29,20 +30,23 @@ class RevisedProtocolTests(unittest.TestCase):
 
     def test_configuration_bits_and_field_order(self):
         config = build_config(1, [True] * 6, ["Torque", "10", "20", "30", "40", "50"])
-        self.assertEqual(config.encode(need_confirmation=True),
-                         struct.pack("<BHBHHHHH", 0x82, 0x3F, 2, 30, 60, 90, 40, 50))
-        for bit, name in enumerate(("default_speed", "max_speed", "max_acceleration",
-                                    "jerk_slope", "max_torque"), 1):
+        self.assertEqual(
+            config.encode(need_confirmation=True),
+            struct.pack("<BHBHHHHH", 0x82, 0x3F, 2, 30, 60, 90, 40, 50),
+        )
+        for bit, name in enumerate(
+            ("default_speed", "max_speed", "max_acceleration", "jerk_slope", "max_torque"), 1
+        ):
             partial = ExternalMotorsControlConfig(1, 1 << bit, **{name: 0x1234})
             self.assertEqual(partial.encode(), struct.pack("<BHH", 1, 1 << bit, 0x1234))
 
     def test_restore_rc_and_confirmation_route(self):
         for index in (0, 1):
-            config = build_config(index, [True] + [False] * 5,
-                                  ["Restore RC (255)"] + [""] * 5)
+            config = build_config(index, [True] + [False] * 5, ["Restore RC (255)"] + [""] * 5)
             device = Mock()
             result = DiagnosticSimpleBGC.configure_ext_motors(
-                device, config, need_confirmation=True, timeout=0.5)
+                device, config, need_confirmation=True, timeout=0.5
+            )
             self.assertIs(result, device.request_raw.return_value)
             args, kwargs = device.request_raw.call_args
             self.assertEqual(args, (130, bytes([0x80 | (1 << index), 1, 0, 255])))
@@ -53,10 +57,12 @@ class RevisedProtocolTests(unittest.TestCase):
             device.send_raw.assert_called_once_with(130, config.encode(), route="control")
 
     def test_invalid_configuration_is_rejected_before_transmission(self):
-        for config in (ExternalMotorsControlConfig(0, 1),
-                       ExternalMotorsControlConfig(1, 0x40),
-                       ExternalMotorsControlConfig(1, 1, mode=3),
-                       ExternalMotorsControlConfig(1, 2, default_speed=65536)):
+        for config in (
+            ExternalMotorsControlConfig(0, 1),
+            ExternalMotorsControlConfig(1, 0x40),
+            ExternalMotorsControlConfig(1, 1, mode=3),
+            ExternalMotorsControlConfig(1, 2, default_speed=65536),
+        ):
             device = Mock()
             with self.assertRaises(ValueError):
                 DiagnosticSimpleBGC.configure_ext_motors(device, config)

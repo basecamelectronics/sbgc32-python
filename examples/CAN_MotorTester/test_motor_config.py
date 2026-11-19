@@ -20,11 +20,15 @@ class ConfigTests(unittest.TestCase):
         self.assertEqual((config.mode, config.max_speed, config.jerk_slope), (2, 65535, 10))
 
     def test_validation_and_omitted_values(self):
-        build_config(0, [True, False, False, False, False, False], ["Position", "invalid", "", "", "", ""])
+        build_config(
+            0, [True, False, False, False, False, False], ["Position", "invalid", "", "", "", ""]
+        )
         for value in ("-1", "21845.01", "65536", "NaN", "Infinity", "-Infinity", ""):
             with self.assertRaises(ValueError):
                 build_config(
-                    0, [False, True, False, False, False, False], ["Position", value, "0", "0", "0", "0"]
+                    0,
+                    [False, True, False, False, False, False],
+                    ["Position", value, "0", "0", "0", "0"],
                 )
         with self.assertRaises(ValueError):
             build_config(0, [False] * 6, ["Position", "0", "0", "0", "0", "0"])
