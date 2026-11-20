@@ -41,6 +41,10 @@ class CurveSelector(QtWidgets.QWidget):
         self.driver = QtWidgets.QComboBox()
         self.driver.addItems(("DRV1", "DRV2"))
         self.field = QtWidgets.QComboBox()
+        for combo in (self.driver, self.field):
+            combo.setStyleSheet(
+                "QComboBox QAbstractItemView { background-color: #ffffff; color: #1e293b; }"
+            )
         self.field.setMinimumWidth(180)
         self.set_fields(range(len(FIELDS)), selected)
         self.remove = QtWidgets.QPushButton("Remove")

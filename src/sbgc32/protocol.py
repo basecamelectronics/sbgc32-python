@@ -63,7 +63,18 @@ class ProtocolCodec:
 
         path = _default_library_path() if library_path is None else Path(library_path)
         if not path.is_file():
-            raise ProtocolError(f"Protocol codec DLL was not found: {path}")
+            raise ProtocolError(
+                f"Protocol codec DLL was not found: {path}\n"
+                f"Loaded Python module: {Path(__file__).resolve()}\n"
+                "Source downloads do not include the compiled native library. "
+                "Install the wheel for your platform from "
+                "https://github.com/basecamelectronics/sbgc32-python/releases "
+                "using the same Python interpreter, or build the native library "
+                "with CMake as described in README.md. "
+                "For source/editable installs, build into src/sbgc32/_native. "
+                "When using a wheel, remove source-path overrides so sbgc32 loads "
+                "from site-packages."
+            )
 
         self._library = ctypes.CDLL(str(path))
         self._configure_abi()

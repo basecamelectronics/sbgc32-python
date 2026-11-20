@@ -16,10 +16,13 @@ motor and encoder for each channel. Disable polling for unused channels.
 
 ### Start
 
+First follow the [installation instructions](../../README.md#how-to-use-code).
+The prebuilt wheel includes the native DLL; a source checkout needs a CMake build.
+
 Close other applications using the controller’s serial port. From the repository root, run:
 
 ```powershell
-py .\examples\CAN_MotorTester\app.py
+.\.venv\Scripts\python.exe .\examples\CAN_MotorTester\app.py
 ```
 
 Select the serial port and click **Connect**. Then enable Poll DRV1/DRV2 for the connected drivers.

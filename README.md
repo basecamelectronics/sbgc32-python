@@ -12,13 +12,59 @@ For standard use, you need Python 3.10+ and a wheel matching your operating syst
 
 How to use code
 -----------------------
-Download wheel you need from the GitHub Release or latest wheel from the same place. Place file to your workspace.
+**Cloning the repository or downloading its source ZIP does not include the
+compiled native library.** On Windows this file is
+`sbgc_python_protocol.dll`. It is included in the platform wheel from
+[GitHub Releases](https://github.com/basecamelectronics/sbgc32-python/releases).
+Choose one of the following installation methods before running examples.
 
-In PowerShell or other cmd install wheel:
+
+### Run examples with a prebuilt wheel (recommended)
+
+Download the wheel for your operating system, then
+create an environment in the repository root. For Windows x64 and Pyton version 3.13:
 
 ```powershell
-py -m pip install .\sbgc32-...-name.whl
+py -3.13 -m venv .venv
+.\.venv\Scripts\python.exe -m pip install --upgrade pip
+.\.venv\Scripts\python.exe -m pip install "C:\path\to\sbgc32-VERSION-py3-none-win_amd64.whl"
 ```
+
+Replace the wheel path with the downloaded file. The wheel installs both the
+Python package and DLL into `.venv\Lib\site-packages\sbgc32`. No manual DLL
+copying or C++ compiler is needed. Use this environment to run the examples.
+
+Check the installation without connecting hardware:
+
+```powershell
+.\.venv\Scripts\python.exe -c "import sbgc32; from sbgc32.protocol import ProtocolCodec; print(sbgc32.__file__); ProtocolCodec(); print('Native library: OK')"
+```
+
+Then also see `How to use the examples`.
+
+
+### Develop the library from source
+
+Build the native library first using the CMake instructions below, then run
+`python -m pip install -e .` with your environment's Python. An editable install
+loads `src/sbgc32` and expects the compiled DLL in `src/sbgc32/_native`.
+Installing with `pip install -e .` does not compile the DLL.
+
+### Missing DLL after cloning
+
+If the error points to `src\sbgc32\_native\sbgc_python_protocol.dll`, Python
+is loading the source package. Either build the DLL from this checkout, or
+use the prebuilt-wheel environment described above.
+
+To switch an existing environment from an editable install to a wheel:
+
+```powershell
+.\.venv\Scripts\python.exe -m pip uninstall sbgc32
+.\.venv\Scripts\python.exe -m pip install "C:\path\to\sbgc32-VERSION-py3-none-win_amd64.whl"
+```
+
+
+### How to use the examples
 
 In `.py` file import library:
 
@@ -40,12 +86,16 @@ pip install matplotlib
 
 Use example CAN_MotorTester to provides a graphical interface 
 for monitoring and controlling two external motor channels. 
-For more information see README in `examples\CAN_MotorTester`. Run with:
+Download the requirements and run:
 
 ```powershell
-py .\examples\CAN_MotorTester\app.py
+.\.venv\Scripts\python.exe -m pip install -r .\examples\CAN_MotorTester\requirements-plots.txt
+.\.venv\Scripts\python.exe .\examples\CAN_MotorTester\app.py
 ```
+For more information for this example, see README in [`examples/CAN_MotorTester/README.md`](examples/CAN_MotorTester/README.md) . 
 
+
+### More about repository
 
 Files Description
 -----------
@@ -82,8 +132,11 @@ Install the Python package
 All commands below use `py`, the standard Windows Python Launcher. `python`
 may be used instead if it points to the same Python installation.
 
-From the repository root, check Python and install the package in editable
-mode:
+This section is for source development. Build the native DLL using the CMake
+commands below **before** installing the package in editable mode. To run
+examples with a ready-made DLL, use the prebuilt-wheel instructions above.
+
+From the repository root, check Python and install the package in editable mode:
 
 ```powershell
 py --version
@@ -124,27 +177,6 @@ The result is written to `src\sbgc32\_native\`
 
 Rebuild the DLL after changing a source or header in `native/`.
 
-#### CMake cannot find a C compiler
-
-If configuration fails with:
-
-```text
-CMake Error: CMAKE_C_COMPILER not set, after EnableLanguage
-```
-
-CMake cannot find Microsoft C/C++ build tools. This is unrelated to whether
-you typed `py` or `python` for Python commands.
-
-Install or modify **Visual Studio Build Tools 2022**, select **Desktop development with C++**, 
-**MSVC v143 x64/x86 tools**, and a **Windows SDK**. Then open a
-new PowerShell window and remove only the failed generated configuration before
-running the two CMake commands again:
-
-```powershell
-Remove-Item -Recurse -Force build\native
-cmake -S . -B build/native -A x64
-cmake --build build/native --config Release
-```
 
 `Bild the wheel`
 -----------------------
